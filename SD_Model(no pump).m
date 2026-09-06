@@ -10,4 +10,5 @@ C_f = C_f_gL/Mw;                % Feed Salinity [mol/L]
 
 
 
-delta_pi = i*R*T*C_f            % Osmotic Pressure
+delta_pi = i*R*T*C_f            % Osmotic Pressure [J/L] or [kPa]
+delta_pi_bar = delta_pi/100;    % Osmotic Pressure [bar]
