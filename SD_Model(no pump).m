@@ -21,3 +21,4 @@ c_w = [0,0];                    % Water concentration in the membrane (at feed, 
 l = 100;                        % Membrane thickness [nm]
 
 % Data sheet data (DuPont FilmTec SW30HRLE-440)
+A_mem = 41;                     % Active area [m2] A_mem
