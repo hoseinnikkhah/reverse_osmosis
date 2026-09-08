@@ -1,8 +1,10 @@
-%% This code is essential part of the SD model. It calculates the osmotic pressure
+%{ 
+This code is essential part of the SD model. It calculates the osmotic pressure
 and water permeability of the membrane. This is based on commercial data sheet of
 DuPont FilmTec SW30HRLE-440. The code is used in the SD model to calculate the 
 water flux through the membrane. Based on the water flux, A and B coeffecients
-are calculated. %%
+are calculated.
+%}
 
 
 % Data driven from the data sheet of DuPont FilmTec SW30HRLE-440
