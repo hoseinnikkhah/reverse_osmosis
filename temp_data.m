@@ -13,5 +13,4 @@ temp = ncread(file, 'thetao');
 %% 2. Surface temperature mapped to dates
 % Keep only surface layer (depth = 1), result is lon × lat × time
 T_surf = squeeze(temp(:,:,1,:));
-
-% T_surf(:,:,i) is now the temperature field for dates(i)
+save('temperature_surface.mat', 'T_surf', 'dates');

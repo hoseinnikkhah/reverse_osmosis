@@ -12,3 +12,4 @@ sal = ncread(file_sal, 'so');
 
 % Surface layer only
 S_surf = squeeze(sal(:,:,1,:));   % lon × lat × 366
+save('salinity_surface.mat', 'S_surf', 'dates_sal');
