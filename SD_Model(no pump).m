@@ -31,9 +31,9 @@ C_f = C_f_gL/Mw;                % Feed Salinity [mol/L]
 R = 8.314;                      % Gas constant [J/mol.K]
 
 % Salt rejection calculation
-C_p_gl = C_f_gL*(1 - Rejection/100);  % Permeate concentration [g/L]
+C_p_gL = C_f_gL*(1 - Rejection/100);  % Permeate concentration [g/L]
 
-deltac_c = C_f_gl - C_p_gl;           % Concentration difference [g/L]
+deltac_c = C_f_gL - C_p_gL;           % Concentration difference [g/L]
 
 % Formula for osmotic pressure calculation
 delta_pi = i*R*T*C_f;                 % Osmotic pressure [Pa]
@@ -44,3 +44,4 @@ J_s = J_w*C_p_gl;                     % Salt flux [g/m2.d]
 
 % Formula for water permeability calculation
 A = J_w/(delta_P - delta_pi);         % Water permeability [m3/m2.d.bar] or [LMH/bar]
+B = J_s/deltac_c;                     % Salt permeability [m/d] or [LMH]
