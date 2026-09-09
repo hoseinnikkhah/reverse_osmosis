@@ -15,5 +15,5 @@ plot(T_list, A_list_LMH, 'LineWidth', 1);
 
 xlabel('Temperature (°C)', 'FontSize', 12);
 ylabel('Water Permeability Coefficient A (LMH/bar)', 'FontSize', 12);
-legend('Membrane A', 'Location', 'best');
+legend('DuPont FilmTec SW30HRLE-440', 'Location', 'best');
 grid on;
