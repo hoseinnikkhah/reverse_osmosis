@@ -25,7 +25,7 @@ Mw = 58.44;                     % Molecular weight
 % Automated conversions
 T = T_c + 273.15;               % Temp [K]
 C_f_gL = ppm/1000;              % Feed Salinity [g/L]
-C_f = C_f_gL/Mw;                % Feed Salinity [mol/L]
+C_f = (C_f_gL/Mw)*1000;         % Feed Salinity [mol/m3]
 
 % Constant values
 R = 8.314;                      % Gas constant [J/mol.K]
@@ -40,7 +40,7 @@ delta_pi = i*R*T*C_f;                 % Osmotic pressure [Pa]
 
 % Formula for flux calculation
 J_w = (Q_p/A_mem);                    % Water flux [m3/m2.d] or [LMH]
-J_s = J_w*C_p_gl;                     % Salt flux [g/m2.d]
+J_s = J_w*C_p_gL;                     % Salt flux [g/m2.d]
 
 % Formula for water permeability calculation
 A = J_w/(delta_P - delta_pi);         % Water permeability [m3/m2.d.bar] or [LMH/bar]
