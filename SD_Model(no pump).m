@@ -16,8 +16,8 @@ ppm = 32000;                    % Feed Salinity [ppm]
 A_mem = 41;                     % Active area [m2] A_mem
 Q_p = 30.2;                     % Permeate flow rate [m3/d]
 R_salt = 99.8;                  % Salt rejection [%] R_salt = 1 - (C_p/C_f)*100 
-
-
+delta_P = 55;                   % Pressure drop across the membrane [bar]
+Recovery = 8;                   % Recovery [%]
 
 % User input data
 Mw = 58.44;                     % Molecular weight
