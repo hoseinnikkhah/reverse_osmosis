@@ -31,15 +31,10 @@ C_f = C_f_gL/Mw;                % Feed Salinity [mol/L]
 R = 8.314;                      % Gas constant [J/mol.K]
 
 % Formula for osmotic pressure calculation
-delta_pi = i*R*T*C_f            % Osmotic Pressure [J/L] or [kPa]
-delta_pi_bar = delta_pi/100;    % Osmotic Pressure [bar]
+delta_pi = i*R*T*C_f;           % Osmotic pressure [Pa]
 
+% Formula for water flux calculation
+J_w = (Q_p/A_mem);              % Water flux [m3/m2.d] or [LMH]
 
-% In above once at x=0 and once x=l calculation are carried
-
-V_w = 18;                       % Partial molar volume of water [cm3/mol]
-c_w = [0,0];                    % Water concentration in the membrane (at feed, after membrane)
-l = 100;                        % Membrane thickness [nm]
-
-
-
+% Formula for water permeability calculation
+A = J_w/(delta_P - delta_pi);   % Water permeability [m3/m2.d.bar] or [LMH/bar]
