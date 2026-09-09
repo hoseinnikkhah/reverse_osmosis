@@ -50,3 +50,5 @@ B = J_s/deltac_c;                     % Salt permeability [m/d]
 % Sanity check against literature values (typical SWRO: A ~ 1.1, B ~ 0.06)
 A_LMH = A*1000/24;                    % Water permeability [LMH/bar]
 B_LMH = B*1000/24;                    % Salt permeability [LMH]
+
+save('membrane_params.mat', 'A', 'B', 'A_LMH','B_LMH');
