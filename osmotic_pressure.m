@@ -28,11 +28,8 @@ end
 
 figure;
 plot(dates, delta_pi_bar, 'LineWidth', 1.5);
-hold on;
-yline(27, '--r', 'Typical SWRO \pi', 'LineWidth', 1);
 
 xlabel('Date', 'FontSize', 12);
 ylabel('Osmotic Pressure (bar)', 'FontSize', 12);
 legend('Osmotic Pressure', 'Location', 'best');
 grid on;
-hold off;
