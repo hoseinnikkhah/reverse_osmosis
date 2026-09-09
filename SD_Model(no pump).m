@@ -33,13 +33,14 @@ R = 8.314;                      % Gas constant [J/mol.K]
 % Salt rejection calculation
 C_p_gl = C_f_gL*(1 - Rejection/100);  % Permeate concentration [g/L]
 
+deltac_c = C_f_gl - C_p_gl;           % Concentration difference [g/L]
 
 % Formula for osmotic pressure calculation
-delta_pi = i*R*T*C_f;           % Osmotic pressure [Pa]
+delta_pi = i*R*T*C_f;                 % Osmotic pressure [Pa]
 
 % Formula for flux calculation
-J_w = (Q_p/A_mem);              % Water flux [m3/m2.d] or [LMH]
-J_s = J_w*C_p_gl;               % Salt flux [g/m2.d]
+J_w = (Q_p/A_mem);                    % Water flux [m3/m2.d] or [LMH]
+J_s = J_w*C_p_gl;                     % Salt flux [g/m2.d]
 
 % Formula for water permeability calculation
-A = J_w/(delta_P - delta_pi);   % Water permeability [m3/m2.d.bar] or [LMH/bar]
+A = J_w/(delta_P - delta_pi);         % Water permeability [m3/m2.d.bar] or [LMH/bar]
