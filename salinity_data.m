@@ -1,11 +1,17 @@
-% Temperature file
-ncdisp('cmems_mod_med_phy-temp_my_4.2km_P1D-m_1788963786018.nc');
-temp = ncread('cmems_mod_med_phy-temp_my_4.2km_P1D-m_1788963786018.nc', 'temp');
+%% 1. File and read
+file = 'cmems_mod_med_phy-temp_my_4.2km_P1D-m_1788964996647.nc';
 
-% Salinity file
-ncdisp('cmems_mod_med_phy-sal_my_4.2km_P1D-m_1788963651121.nc');
-sal = ncread('cmems_mod_med_phy-sal_my_4.2km_P1D-m_1788963651121.nc', 'salinity');
+% Time → dates
+t = ncread(file, 'time');
+t_units = ncreadatt(file, 'time', 'units');          % 'days since 1950-01-01 ...'
+ref = datetime(extractAfter(t_units, 'since '), 'InputFormat', 'yyyy-MM-dd HH:mm:ss');
+dates = ref + days(t);
 
-% Check dimensions match
-size(temp)
-size(sal)
+% Temperature (lon × lat × depth × time)
+temp = ncread(file, 'thetao');
+
+%% 2. Surface temperature mapped to dates
+% Keep only surface layer (depth = 1), result is lon × lat × time
+T_surf = squeeze(temp(:,:,1,:));
+
+% T_surf(:,:,i) is now the temperature field for dates(i)
