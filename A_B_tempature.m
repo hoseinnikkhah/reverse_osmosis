@@ -12,3 +12,8 @@ for i=1:length(T_list)
 end
 figure;
 plot(T_list, A_list_LMH, 'LineWidth', 1);
+
+xlabel('Temperature (°C)', 'FontSize', 12);
+ylabel('Water Permeability Coefficient A (LMH/bar)', 'FontSize', 12);
+legend('Membrane A', 'Location', 'best');
+grid on;
