@@ -13,6 +13,12 @@ i = 2;                          % NaCl fracction
 T_c = 25;                       % Temp [C]
 ppm = 32000;                    % Feed Salinity [ppm]
 
+A_mem = 41;                     % Active area [m2] A_mem
+Q_p = 30.2;                     % Permeate flow rate [m3/d]
+R_salt = 99.8;                  % Salt rejection [%] R_salt = 1 - (C_p/C_f)*100 
+
+
+
 % User input data
 Mw = 58.44;                     % Molecular weight
 
@@ -35,5 +41,5 @@ V_w = 18;                       % Partial molar volume of water [cm3/mol]
 c_w = [0,0];                    % Water concentration in the membrane (at feed, after membrane)
 l = 100;                        % Membrane thickness [nm]
 
-% Data sheet data (DuPont FilmTec SW30HRLE-440)
-A_mem = 41;                     % Active area [m2] A_mem
+
+
