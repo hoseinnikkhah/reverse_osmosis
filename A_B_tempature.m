@@ -8,5 +8,7 @@ for i=1:length(T_list)
     A_temp_LMH = A_LMH*1.03^(T_c - 25);  % Temperature correction for A [LMH/bar]
     A_list_LMH(i) = A_temp_LMH;
     A_temp = A*1.03^(T_c - 25);  % Temperature correction for A [LMH/bar]
-    A_list(i) = A_temp_LMH;
+    A_list(i) = A_temp;
 end
+figure;
+plot(T_list, A_list_LMH, 'LineWidth', 1);
