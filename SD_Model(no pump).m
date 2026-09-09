@@ -15,7 +15,7 @@ ppm = 32000;                    % Feed Salinity [ppm]
 
 A_mem = 41;                     % Active area [m2] A_mem
 Q_p = 30.2;                     % Permeate flow rate [m3/d]
-R_salt = 99.8;                  % Salt rejection [%] R_salt = 1 - (C_p/C_f)*100 
+Rejection = 99.8;               % Salt rejection [%] R_salt = 1 - (C_p/C_f)*100 
 delta_P = 55;                   % Pressure drop across the membrane [bar]
 Recovery = 8;                   % Recovery [%]
 
@@ -30,11 +30,16 @@ C_f = C_f_gL/Mw;                % Feed Salinity [mol/L]
 % Constant values
 R = 8.314;                      % Gas constant [J/mol.K]
 
+% Salt rejection calculation
+C_p_gl = C_f_gL*(1 - Rejection/100);  % Permeate concentration [g/L]
+
+
 % Formula for osmotic pressure calculation
 delta_pi = i*R*T*C_f;           % Osmotic pressure [Pa]
 
-% Formula for water flux calculation
+% Formula for flux calculation
 J_w = (Q_p/A_mem);              % Water flux [m3/m2.d] or [LMH]
+J_s = J_w*C_p_gl;               % Salt flux [g/m2.d]
 
 % Formula for water permeability calculation
 A = J_w/(delta_P - delta_pi);   % Water permeability [m3/m2.d.bar] or [LMH/bar]
