@@ -26,6 +26,8 @@ for j=1:366
     delta_pi_bar(j) = delta_pi(j)/1e5;           % Osmotic pressure [bar]
 end
 
+save('osmotic_pressure.mat', 'delta_pi_bar', 'dates');
+
 figure;
 plot(dates, delta_pi_bar, 'LineWidth', 1.5);
 
