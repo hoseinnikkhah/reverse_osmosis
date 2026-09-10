@@ -3,7 +3,7 @@ load('salinity_and_temp_mean.mat', 'T_daily_mean', 'S_daily_mean', 'dates');
 load('A_temp_data.mat', 'A_block');
 
 %% Creating a water flux range for the STPi values
-J_w = 12:0.01:30;  % Water flux range [LMH]
+J_w = 12:0.1:30;  % Water flux range [LMH]
 
 %% Creating a data block for the STPi values
 %% S = Salinity, T = Temperature, Pi = Osmotic Pressure
@@ -21,3 +21,5 @@ for i = 1:length(J_w)
         delta_P(i, j) = (J_w_i / A_temp) + temp_pi;  % Calculate delta_P for each J_w and STPi
     end
 end
+
+save('delta_P_finder.mat', 'delta_P', 'J_w', 'STPi', 'dates');
