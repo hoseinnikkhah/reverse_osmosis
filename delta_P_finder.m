@@ -19,5 +19,6 @@ for i = 1:length(J_w)
         temp_pi = delta_pi_bar(j);
         col = find(A_block(1, :) == temp_T);
         A_temp = A_block(2, col);
+        delta_P(i, j) = (J_w_i / A_temp) + temp_pi;  % Calculate delta_P for each J_w and STPi
     end
 end
