@@ -13,11 +13,11 @@ STPi = [S_daily_mean; T_daily_mean; delta_pi_bar];
 delta_P = zeros(length(J_w), 366);
 
 for i = 1:length(J_w)
+    J_w_i = J_w(i);
     for j = 1:366
         temp_T = T_daily_mean(j);
         temp_pi = delta_pi_bar(j);
         col = find(A_block(1, :) == temp_T);
         A_temp = A_block(2, col);
-        delta_P(i, j) = (J_w(i)/A_temp) + temp_pi;
     end
 end
