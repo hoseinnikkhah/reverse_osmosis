@@ -6,6 +6,9 @@ load('salinity_surface.mat');      % brings in S_surf (8×12×366) and dates_sal
 T_daily_mean = mean(reshape(T_surf, 96, 366), 1, 'omitnan');
 S_daily_mean = mean(reshape(S_surf, 96, 366), 1, 'omitnan');
 
+%% Save mean mat file
+save('salinity_and_temp_mean.mat', 'T_daily_mean', 'S_daily_mean', 'dates');
+
 %% Fixed date range: 31 July 2025 to 31 July 2026 (366 daily points)
 dates = datetime(2025, 7, 31) : datetime(2026, 7, 31);
 

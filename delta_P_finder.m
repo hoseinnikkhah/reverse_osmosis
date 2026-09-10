@@ -1,4 +1,3 @@
 load('osmotic_pressure.mat', 'delta_pi_bar');
-load('temperature_surface.mat', 'T_surf', 'dates');
-load('salinity_surface.mat', 'S_surf', 'dates_sal');
+save('salinity_and_temp_mean.mat', 'T_daily_mean', 'S_daily_mean', 'dates');
 load('A_temp_data.mat', 'A_list_LMH');
