@@ -21,22 +21,7 @@ ylabel('Water Flux J_w (LMH)');
 title('Required Net Driving Pressure \DeltaP (bar) — Heatmap');
 
 %% =======================================================================
-%% Figure 2: 3D Surface
-%% =======================================================================
-figure('Name','3D Surface','Position',[150 150 900 500]);
-surf(1:366, J_w, delta_P);
-shading interp;
-colorbar;
-colormap(jet);
-
-xticks(month_ticks); xticklabels(month_labels);
-xlabel('Month');
-ylabel('Water Flux J_w (LMH)');
-zlabel('Required \DeltaP (bar)');
-title('Net Driving Pressure vs Flux and Time — Surface');
-
-%% =======================================================================
-%% Figure 3: Contour Plot
+%% Figure 2: Contour Plot
 %% =======================================================================
 figure('Name','Contour','Position',[200 200 900 400]);
 contourf(1:366, J_w, delta_P, 20);
@@ -53,7 +38,7 @@ ylabel('Water Flux J_w (LMH)');
 title('Required \DeltaP (bar) — Contours (black lines: 50/55/60 bar)');
 
 %% =======================================================================
-%% Figure 4: Representative Line Curves
+%% Figure 3: Representative Line Curves
 %% =======================================================================
 figure('Name','Line Curves','Position',[250 250 900 400]);
 hold on;
@@ -78,7 +63,7 @@ legend('Location', 'best');
 grid on;
 
 %% =======================================================================
-%% Figure 5: Heatmap + Threshold Contours (combined view)
+%% Figure 4: Heatmap + Threshold Contours (combined view)
 %% =======================================================================
 figure('Name','Combined View','Position',[300 300 900 400]);
 imagesc(1:366, J_w, delta_P);
