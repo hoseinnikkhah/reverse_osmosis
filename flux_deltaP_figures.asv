@@ -1,0 +1,18 @@
+load('delta_P_finder.mat', 'delta_P', 'J_w', 'STPi', 'dates');
+
+figure;
+imagesc(1:366, J_w, delta_P);    % x = day number 1 to 366
+axis xy;
+colorbar;
+colormap(jet);
+
+% Set x-ticks to first of each month
+month_starts = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366];
+month_labels = {'Aug 2025','Sep 2025','Oct 2025','Nov 2025','Dec 2025','Jan 2026','Feb 2026','Mar 2026','Apr 2026','May 2026','Jun 2026','Jul 2026','Aug 2026'};
+
+xticks(month_starts);
+xticklabels(month_labels);
+
+xlabel('Month');
+ylabel('Water Flux J_w (LMH)');
+title('Required Net Driving Pressure \DeltaP (bar)');
