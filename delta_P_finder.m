@@ -7,7 +7,7 @@ J_w = 12:0.01:30;  % Water flux range [LMH]
 
 %% Creating a data block for the STPi values
 %% S = Salinity, T = Temperature, Pi = Osmotic Pressure
-STPi = [S_daily_mean; T_daily_mean; delta_pi_bar; A_block(2, :)];
+STPi = [S_daily_mean; T_daily_mean; delta_pi_bar];
 
 %% Create a delta_P block for the STPi values
 delta_P = zeros(length(J_w), 366);
