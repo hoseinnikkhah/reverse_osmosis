@@ -11,7 +11,9 @@ for i=1:length(T_list)
     A_list(i) = A_temp;
 end
 
-save('A_temp_data.mat', 'A_list_LMH');
+A_block = [T_list; A_list_LMH];
+
+save('A_temp_data.mat', 'A_block');
 
 figure;
 plot(T_list, A_list_LMH, 'LineWidth', 1);
