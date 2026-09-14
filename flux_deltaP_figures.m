@@ -43,7 +43,7 @@ title('Required \DeltaP (bar) — Contours (black lines: 50/55/60 bar)');
 figure('Name','Line Curves','Position',[250 250 900 400]);
 hold on;
 
-flux_picks = [15, 20, 25, 30];
+flux_picks = [0, 5, 10, 15, 20, 25, 30];
 colors = lines(length(flux_picks));
 
 for k = 1:length(flux_picks)
