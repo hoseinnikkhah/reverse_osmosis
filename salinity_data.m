@@ -1,7 +1,7 @@
 %% Salinity file
 file_sal = 'cmems_mod_med_phy-sal_my_4.2km_P1D-m_1788964958643.nc';
 
-% Time → dates (same method as temp)
+% Time saved to dates (same method as temp)
 t = ncread(file_sal, 'time');
 t_units = ncreadatt(file_sal, 'time', 'units');
 ref = datetime(extractAfter(t_units, 'since '), 'InputFormat', 'yyyy-MM-dd HH:mm:ss');
