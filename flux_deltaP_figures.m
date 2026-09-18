@@ -18,7 +18,7 @@ colormap(jet);
 xticks(month_ticks); xticklabels(month_labels);
 xlabel('Month');
 ylabel('Water Flux J_w (LMH)');
-title('Required Net Driving Pressure \DeltaP (bar) — Heatmap');
+title('Required Net Driving Pressure \DeltaP (bar) Heatmap');
 
 %% =======================================================================
 %% Figure 2: Contour Plot
@@ -26,7 +26,7 @@ title('Required Net Driving Pressure \DeltaP (bar) — Heatmap');
 figure('Name','Contour','Position',[200 200 900 400]);
 contourf(1:366, J_w, delta_P, 20);
 hold on;
-contour(1:366, J_w, delta_P, [50 55 60], 'k-', 'LineWidth', 1.5);
+contour(1:366, J_w, delta_P, [40 50 60], 'k-', 'LineWidth', 1.5);
 hold off;
 
 colorbar;
@@ -35,7 +35,7 @@ colormap(jet);
 xticks(month_ticks); xticklabels(month_labels);
 xlabel('Month');
 ylabel('Water Flux J_w (LMH)');
-title('Required \DeltaP (bar) — Contours (black lines: 50/55/60 bar)');
+title('Required \DeltaP (bar) Contours (black lines: 40/50/60 bar)');
 
 %% =======================================================================
 %% Figure 3: Representative Line Curves
