@@ -1,8 +1,6 @@
 
-% load('your_Cp_file.mat', 'C_p_block', 'J_w');  % adjust as needed
-% Assuming C_p is 301×366 and J_w is 0:0.1:30 (301 points)
+load('C_p_finder.mat', 'C_p_block', 'J_w');
 
-%% Month labels (day indices for a year starting 31 July)
 month_ticks = [1 32 62 93 123 154 185 214 245 275 306 336 366];
 month_labels = {'Aug 25','Sep 25','Oct 25','Nov 25','Dec 25','Jan 26',...
                 'Feb 26','Mar 26','Apr 26','May 26','Jun 26','Jul 26','Aug 26'};
