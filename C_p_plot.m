@@ -21,7 +21,7 @@ hold off;
 
 xticks(month_ticks); xticklabels(month_labels);
 xlabel('Month');
-ylabel('Permeate Concentration C_p');
+ylabel('Permeate Concentration C_p [ppm]');
 title('C_p Variation Over the Year for Selected Fluxes');
 legend('Location', 'best');
 grid on;
