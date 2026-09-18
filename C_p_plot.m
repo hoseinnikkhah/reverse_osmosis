@@ -1,4 +1,4 @@
-
+%% Obselet file
 load('C_p_finder.mat', 'C_p_block', 'J_w');
 
 month_ticks = [1 32 62 93 123 154 185 214 245 275 306 336 366];
