@@ -17,4 +17,4 @@ for i = 1:length(J_w)
     end
 end
 
-save('C_p_finder.mat', 'C_p_block');
+save('C_p_finder.mat', 'C_p_block', 'J_w');
