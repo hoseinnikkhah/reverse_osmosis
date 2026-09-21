@@ -13,7 +13,13 @@ J_design = {17:0.5:21; 15:0.5:19; 14:0.5:17; 12:0.5:17};   % Design flux [LMH]
 J_max    = [38; 36; 34; 32];                               % Max element flux [LMH]
 rec_max  = [16; 15; 14; 13];                               % Max element recovery [%]
 
-R_ceil = 1 - (1 - config.rec_max/100) .^ N_elements;   % [4 x 3], rows = config, cols = elements/vessel
+ceil_recovery = zeros(3, 4);   % rows = elements per vessel (5,6,7), cols = configurations
+for iE = 1:3
+    for k = 1:4
+        r_e = rec_max(k) / 100;                                 % max element recovery [-]
+        ceil_recovery(iE, k) = 1 - (1 - r_e)^N_elements(iE);    % max vessel recovery [-]
+    end
+end
 
 config = table(Name, J_design, J_max, rec_max);
 
@@ -102,7 +108,8 @@ end
 lg = legend(ax, handles, labels, 'Orientation', 'horizontal');
 lg.Layout.Tile = 'south';
 
-% exportgraphics(figC, 'capacity_bands_all.pdf', 'ContentType', 'vector');
+
+save('design_data.mat', 'config', 'ceil_recovery', 'N_elements',  'N_vessels', 'A_m', 'total_A');
 
 %% Local function: draws one capacity band on a given axes
 function h = plotCapacityBand(ax, A_build, A_line, J_lo, J_hi, J_max, c, Q_demand)
@@ -133,3 +140,8 @@ function h = plotCapacityBand(ax, A_build, A_line, J_lo, J_hi, J_max, c, Q_deman
 
     hold(ax, 'off');
 end
+
+
+
+
+
