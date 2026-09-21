@@ -15,8 +15,15 @@ for i = 1:length(N_elements)
 end
 
 %% Flux ranges for different pretreatment and membrane configurations
-flux_range_UF_plus_B_free = 17:0.5:21; % Range of flux values for UF + B-free
-flux_range_Well_open_intake_plus_UF = 15:0.5:19; % Range of flux values for Well/open intake + UF
-flux_range_Generic_membrane_filtration = 14:0.5:17; % Range of flux values for Generic membrane filtration
-flux_range_Conventional_pretreatment = 12:0.5:17; % Range of flux values for Conventional pretreatment
+%flux_range_UF_plus_B_free = 17:0.5:21; % Range of flux values for UF + B-free
+%flux_range_Well_open_intake_plus_UF = 15:0.5:19; % Range of flux values for Well/open intake + UF
+%flux_range_Generic_membrane_filtration = 14:0.5:17; % Range of flux values for Generic membrane filtration
+%flux_range_Conventional_pretreatment = 12:0.5:17; % Range of flux values for Conventional pretreatment
 
+Name    = ["UF + B-free"; "Well/open intake + UF"; ...
+           "Generic membrane filtration"; "Conventional pretreatment"];
+J_design = {17:0.5:21; 15:0.5:19; 14:0.5:17; 12:0.5:17};
+J_max    = [38; 36; 34; 32];
+rec_max  = [16; 15; 14; 13];
+
+config = table(Name, J_design, J_max, rec_max);
