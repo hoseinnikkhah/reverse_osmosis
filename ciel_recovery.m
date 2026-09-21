@@ -1,0 +1,22 @@
+%% Vessel design
+A_m        = 41;                    % Active area per element [m2] (SW30HRLE-440)
+N_elements = [5, 6, 7];             % Elements per vessel (Codeline 80E max = 7)
+N_vessels  = 1:10;                  % Number of vessels in parallel
+
+% Total active area: rows = elements per vessel, columns = number of vessels
+total_A = A_m * N_elements(:) * N_vessels;          % [m2], size 3 x 10
+
+%% Pretreatment configurations (DuPont FilmTec Manual, Table 22, seawater)
+Name     = ["UF + B-free"; "Well/open intake + UF"; ...
+            "Generic membrane filtration"; "Conventional pretreatment"];
+J_design = {17:0.5:21; 15:0.5:19; 14:0.5:17; 12:0.5:17};   % Design flux [LMH]
+J_max    = [38; 36; 34; 32];                               % Max element flux [LMH]
+rec_max  = [16; 15; 14; 13];                               % Max element recovery [%]
+
+ciel_recovery = zero(3, 4);  % Preallocate for 3 elements x 4 configurations
+for i = 1:3
+    for j = 1:4
+        % Calculate the maximum recovery for each configuration and element count
+        ciel_recovery(i, j) = (rec_max(j) / 100) * (N_elements(i) * N_vessels(end));
+    end
+end
