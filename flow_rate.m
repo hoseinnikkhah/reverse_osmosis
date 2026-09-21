@@ -13,7 +13,7 @@ J_design = {17:0.5:21; 15:0.5:19; 14:0.5:17; 12:0.5:17};   % Design flux [LMH]
 J_max    = [38; 36; 34; 32];                               % Max element flux [LMH]
 rec_max  = [16; 15; 14; 13];                               % Max element recovery [%]
 
-ceiling_rec = 1 - (1 - rec_max/100).^(1./N_elements');
+R_ceil = 1 - (1 - config.rec_max/100) .^ N_elements;   % [4 x 3], rows = config, cols = elements/vessel
 
 config = table(Name, J_design, J_max, rec_max);
 
@@ -102,7 +102,6 @@ end
 lg = legend(ax, handles, labels, 'Orientation', 'horizontal');
 lg.Layout.Tile = 'south';
 
-% Export for the paper (vector PDF) - uncomment when ready
 % exportgraphics(figC, 'capacity_bands_all.pdf', 'ContentType', 'vector');
 
 %% Local function: draws one capacity band on a given axes
