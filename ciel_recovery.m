@@ -13,10 +13,10 @@ J_design = {17:0.5:21; 15:0.5:19; 14:0.5:17; 12:0.5:17};   % Design flux [LMH]
 J_max    = [38; 36; 34; 32];                               % Max element flux [LMH]
 rec_max  = [16; 15; 14; 13];                               % Max element recovery [%]
 
-ciel_recovery = zero(3, 4);  % Preallocate for 3 elements x 4 configurations
-for i = 1:3
-    for j = 1:4
-        % Calculate the maximum recovery for each configuration and element count
-        ciel_recovery(i, j) = (rec_max(j) / 100) * (N_elements(i) * N_vessels(end));
+ceil_recovery = zeros(3, 4);   % rows = elements per vessel (5,6,7), cols = configurations
+for iE = 1:3
+    for k = 1:4
+        r_e = rec_max(k) / 100;                                 % max element recovery [-]
+        ceil_recovery(iE, k) = 1 - (1 - r_e)^N_elements(iE);    % max vessel recovery [-]
     end
 end
