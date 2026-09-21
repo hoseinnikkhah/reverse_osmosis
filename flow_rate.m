@@ -42,44 +42,93 @@ A_build  = unique(total_A(:));       % distinct buildable areas [m2]
 A_line   = [0; max(A_build)];        % x-range for the band edges [m2]
 Q_demand = [];                       % optional demand line [m3/d], e.g. 500
 
+% Common y-limit so all configurations are directly comparable
+Q_ymax = max(A_build) * max(config.J_max) * LMH_to_m3d;
+
+%% (1) Separate figure for each configuration
 for k = 1:height(config)
     J_lo = min(config.J_design{k});
     J_hi = max(config.J_design{k});
 
-    figure('Name', char(config.Name(k)));
-    hold on; box on; grid on;
+    fig = figure('Name', char(config.Name(k)));
+    ax  = axes(fig);
+    h   = plotCapacityBand(ax, A_build, A_line, J_lo, J_hi, ...
+                           config.J_max(k), LMH_to_m3d, Q_demand);
 
-    % Design-flux band (wedge between lowest and highest design flux)
-    hBand = fill([A_line; flipud(A_line)], ...
-                 [A_line*J_lo; flipud(A_line*J_hi)] * LMH_to_m3d, ...
-                 [0.3 0.6 0.9], 'FaceAlpha', 0.25, 'EdgeColor', 'none');
-    plot(A_line, A_line*J_lo*LMH_to_m3d, 'b-', 'LineWidth', 1.2);
-    plot(A_line, A_line*J_hi*LMH_to_m3d, 'b-', 'LineWidth', 1.2);
-
-    % Max element flux (upper bound)
-    hMax = plot(A_line, A_line*config.J_max(k)*LMH_to_m3d, 'r--', 'LineWidth', 1.2);
-
-    % Buildable designs: production range at each achievable area
-    for a = A_build'
-        plot([a a], [J_lo J_hi]*a*LMH_to_m3d, 'k-', 'LineWidth', 1);
-    end
-    hDes = plot(A_build, A_build*J_lo*LMH_to_m3d, 'k.', 'MarkerSize', 12);
-    plot(A_build, A_build*J_hi*LMH_to_m3d, 'k.', 'MarkerSize', 12);
-
-    % Optional demand line
-    handles = [hBand, hMax, hDes];
+    handles = [h.band, h.max, h.des];
     labels  = {sprintf('Design flux %g-%g LMH', J_lo, J_hi), ...
                sprintf('Max element flux %g LMH', config.J_max(k)), ...
                'Buildable designs'};
-    if ~isempty(Q_demand)
-        hDem = yline(Q_demand, 'g-', 'LineWidth', 1.5);
-        handles(end+1) = hDem;
+    if ~isempty(h.dem)
+        handles(end+1) = h.dem;
         labels{end+1}  = sprintf('Demand %g m^3/d', Q_demand);
     end
 
-    xlabel('Total active membrane area [m^2]');
-    ylabel('Permeate production Q_p [m^3/d]');
-    title(config.Name(k));
-    legend(handles, labels, 'Location', 'northwest');
-    hold off;
+    xlabel(ax, 'Total active membrane area [m^2]');
+    ylabel(ax, 'Permeate production Q_p [m^3/d]');
+    title(ax, config.Name(k));
+    ylim(ax, [0 Q_ymax]);
+    legend(ax, handles, labels, 'Location', 'northwest');
+end
+
+%% (2) Combined 2x2 figure for the paper
+figC = figure('Name', 'Capacity bands - all configurations');
+tl   = tiledlayout(figC, 2, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
+
+for k = 1:height(config)
+    J_lo = min(config.J_design{k});
+    J_hi = max(config.J_design{k});
+
+    ax = nexttile(tl);
+    h  = plotCapacityBand(ax, A_build, A_line, J_lo, J_hi, ...
+                          config.J_max(k), LMH_to_m3d, Q_demand);
+
+    title(ax, sprintf('%s (%g-%g LMH)', config.Name(k), J_lo, J_hi));
+    ylim(ax, [0 Q_ymax]);
+end
+
+xlabel(tl, 'Total active membrane area [m^2]');
+ylabel(tl, 'Permeate production Q_p [m^3/d]');
+
+% One shared legend below all tiles (flux values are in each tile title)
+handles = [h.band, h.max, h.des];
+labels  = {'Design flux range', 'Max element flux', 'Buildable designs'};
+if ~isempty(h.dem)
+    handles(end+1) = h.dem;
+    labels{end+1}  = 'Demand';
+end
+lg = legend(ax, handles, labels, 'Orientation', 'horizontal');
+lg.Layout.Tile = 'south';
+
+% Export for the paper (vector PDF) - uncomment when ready
+% exportgraphics(figC, 'capacity_bands_all.pdf', 'ContentType', 'vector');
+
+%% Local function: draws one capacity band on a given axes
+function h = plotCapacityBand(ax, A_build, A_line, J_lo, J_hi, J_max, c, Q_demand)
+    hold(ax, 'on'); box(ax, 'on'); grid(ax, 'on');
+
+    % Design-flux band
+    h.band = fill(ax, [A_line; flipud(A_line)], ...
+                  [A_line*J_lo; flipud(A_line*J_hi)] * c, ...
+                  [0.3 0.6 0.9], 'FaceAlpha', 0.25, 'EdgeColor', 'none');
+    plot(ax, A_line, A_line*J_lo*c, 'b-', 'LineWidth', 1.2);
+    plot(ax, A_line, A_line*J_hi*c, 'b-', 'LineWidth', 1.2);
+
+    % Max element flux (upper bound only)
+    h.max = plot(ax, A_line, A_line*J_max*c, 'r--', 'LineWidth', 1.2);
+
+    % Buildable designs: production range at each achievable area
+    for a = A_build'
+        plot(ax, [a a], [J_lo J_hi]*a*c, 'k-', 'LineWidth', 1);
+    end
+    h.des = plot(ax, A_build, A_build*J_lo*c, 'k.', 'MarkerSize', 12);
+    plot(ax, A_build, A_build*J_hi*c, 'k.', 'MarkerSize', 12);
+
+    % Optional demand line
+    h.dem = [];
+    if ~isempty(Q_demand)
+        h.dem = yline(ax, Q_demand, 'g-', 'LineWidth', 1.5);
+    end
+
+    hold(ax, 'off');
 end
