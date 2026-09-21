@@ -7,4 +7,9 @@ A_m = 41; % Active area of the membrane [m2] A_mem
 
 A_membrane = A_m .* N_elements; % Total active area of the membrane in the vessel [m2]
 
-%total_A = A_membrane .* N_vessels; % Total active area of the membrane in the system [m2]
+total_A = zeros(length(N_elements), length(N_vessels)); % Preallocate total_A array
+for i = 1:length(N_elements)
+    for j = 1:length(N_vessels)
+        total_A(i, j) = A_membrane(i) * N_vessels(j); % Total active area of the system [m2]
+    end
+end
