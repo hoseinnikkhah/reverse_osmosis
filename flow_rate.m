@@ -10,8 +10,10 @@ total_A = A_m * N_elements(:) * N_vessels;          % [m2], size 3 x 10
 Name     = ["UF + B-free"; "Well/open intake + UF"; ...
             "Generic membrane filtration"; "Conventional pretreatment"];
 J_design = {17:0.5:21; 15:0.5:19; 14:0.5:17; 12:0.5:17};   % Design flux [LMH]
-J_max    = [38; 36; 34; 32];                                % Max element flux [LMH]
-rec_max  = [16; 15; 14; 13];                                % Max element recovery [%]
+J_max    = [38; 36; 34; 32];                               % Max element flux [LMH]
+rec_max  = [16; 15; 14; 13];                               % Max element recovery [%]
+
+ceiling_rec = 1 - (1 - rec_max/100).^(1./N_elements');
 
 config = table(Name, J_design, J_max, rec_max);
 
