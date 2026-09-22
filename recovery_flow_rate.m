@@ -12,9 +12,9 @@ Q_Well_open_intake_UF = data.Q_p{2, 1};
 Q_Generic_membrane_filtration = data.Q_p{3, 1};
 Q_Conventional_pretreatment = data.Q_p{4, 1};
 
-for i = 1:3
-    for j = 1:4
-        if ceil_rec(i,j) < recovery_rate_1(end)/100
-          break
-        end
+%for i = 1:3
+%    for j = 1:4
+%        if ceil_rec(i,j) < recovery_rate_1(end)/100
+%          break
+%        end
 

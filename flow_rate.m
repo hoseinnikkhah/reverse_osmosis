@@ -110,7 +110,7 @@ lg = legend(ax, handles, labels, 'Orientation', 'horizontal');
 lg.Layout.Tile = 'south';
 
 %% Save design data
-save('design_data.mat', 'config', 'ceil_recovery', 'N_elements', 'N_vessels', 'A_m', 'total_A', 'Q_p', 'Q_p_Jmax', 'LMH_to_m3d');
+save('design_data.mat', 'config', 'ceil_recovery', 'N_elements', 'N_vessels', 'A_m', 'total_A', 'Q_p', 'Q_p_Jmax', 'LMH_to_m3d', 'J_design');
 
 % exportgraphics(figC, 'capacity_bands_all.pdf', 'ContentType', 'vector');
 %% Local function: draws one capacity band on a given axes
