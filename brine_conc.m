@@ -1,5 +1,5 @@
 load('salinity_and_temp_mean.mat')
-recovery = 30:1:50;                                             % Recovery range [%]
+recovery = 30:1:60;                                             % Recovery range [%]
 C_brine = zeros(length(recovery), length(S_daily_mean));        % Preallocate brine concentration array
 
 for i = 1:length(recovery)
