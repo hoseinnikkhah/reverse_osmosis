@@ -1,4 +1,8 @@
 load('salinity_and_temp_mean.mat')
+
+R = 8.314;                      % Gas constant [J/mol.K]
+i = 2;                          % NaCl fraction
+
 recovery = 30:1:60;                                                     % Recovery range [%]
 C_brine = zeros(length(recovery), length(S_daily_mean));                % Preallocate brine concentration array [PSU]
 C_avg = zeros(length(recovery), length(S_daily_mean));                  % Preallocate average brine concentration array [PSU]
