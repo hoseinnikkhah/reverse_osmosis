@@ -3,20 +3,21 @@ load('salinity_and_temp_mean.mat')
 R = 8.314;                      % Gas constant [J/mol.K]
 i = 2;                          % NaCl fraction
 
-recovery = 30:1:60;                                                     % Recovery range [%]
-C_brine = zeros(length(recovery), length(S_daily_mean));                % Preallocate brine concentration array [PSU]
-C_avg = zeros(length(recovery), length(S_daily_mean));                  % Preallocate average brine concentration array [PSU]
-osmotic_pressure_new = zeros(length(recovery), length(S_daily_mean));   % Preallocate osmotic pressure array [bar]
+recovery = 30:1:60;                                                         % Recovery range [%]
+C_brine = zeros(length(recovery), length(S_daily_mean));                    % Preallocate brine concentration array [PSU]
+C_avg = zeros(length(recovery), length(S_daily_mean));                      % Preallocate average brine concentration array [PSU]
+osmotic_pressure_C_avg = zeros(length(recovery), length(S_daily_mean));     % Preallocate osmotic pressure array [bar]
+osmotic_pressure_C_brine = zeros(length(recovery), length(S_daily_mean));   % Preallocate osmotic pressure array [bar]
 
 for k = 1:length(recovery)
     for j = 1:length(S_daily_mean)
-        C_brine(k, j) = S_daily_mean(j) / (1 - recovery(k)/100);        % Calculate brine concentration [PSU]
+        C_brine(k, j) = S_daily_mean(j) / (1 - recovery(k)/100);            % Calculate brine concentration [PSU]
     end
 end
 
 for k = 1:length(recovery)
     for j = 1:length(S_daily_mean)
-        C_avg(k, j) = (S_daily_mean(j) + C_brine(k, j)) / 2;            % Calculate average brine concentration [PSU]
+        C_avg(k, j) = (S_daily_mean(j) + C_brine(k, j)) / 2;                % Calculate average brine concentration [PSU]
     end
 end
 
@@ -26,7 +27,20 @@ for k = 1:length(recovery)
         C_salt_gL = C_avg(k, j)*1.027;               % Average brine salinity [g/L]
         C_salt = (C_salt_gL/58.44)*1000;             % Average brine salinity [mol/m3]
 
-        osmotic_pressure_new(k, j) = i*R*(T_c + 273.15)*C_salt;     % Osmotic pressure [Pa]
-        osmotic_pressure_new(k, j) = osmotic_pressure_new(k, j)/1e5; % Osmotic pressure [bar]
+        osmotic_pressure_C_avg(k, j) = i*R*(T_c + 273.15)*C_salt;     % Osmotic pressure [Pa]
+        osmotic_pressure_C_avg(k, j) = osmotic_pressure_C_avg(k, j)/1e5; % Osmotic pressure [bar]
     end
 end
+
+for k = 1:length(recovery)
+    for j = 1:length(S_daily_mean)
+        T_c = T_daily_mean(j);                       % Temp [C]
+        C_salt_gL = C_brine(k, j)*1.027;               % Average brine salinity [g/L]
+        C_salt = (C_salt_gL/58.44)*1000;             % Average brine salinity [mol/m3]
+
+        osmotic_pressure_C_brine(k, j) = i*R*(T_c + 273.15)*C_salt;     % Osmotic pressure [Pa]
+        osmotic_pressure_C_brine(k, j) = osmotic_pressure_C_brine(k, j)/1e5; % Osmotic pressure [bar]
+    end
+end
+
+save('osmotic_pressure_recovery.mat', 'C_brine', 'C_avg', 'osmotic_pressure_C_avg', 'osmotic_pressure_C_brine', 'recovery', 'dates');
