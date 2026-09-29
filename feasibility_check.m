@@ -55,7 +55,7 @@ save('feasibility_checks.mat', 'driving_ok', 'pressure_ok', 'dP_feasible', 'J_mi
 figure;
 hold on; box on; grid on;
 ok = ~isnan(J_min) & ~isnan(J_max_feasible);
-fill([recovery(ok), fliplr(recovery(ok))], [J_min(ok), fliplr(J_max_feasible(ok))], [0.4 0.6 0.9], 'FaceAlpha', 0.25, 'EdgeColor', 'none');
+fill([recovery(ok), fliplr(recovery(ok))], [J_min(ok), fliplr(J_max_feasible(ok))], [0.13 0.55 0.13], 'FaceAlpha', 0.25, 'EdgeColor', 'none');
 %fill([recovery, fliplr(recovery)], [J_min, fliplr(J_max_feasible)], [0.3 0.6 0.9], 'FaceAlpha', 0.25, 'EdgeColor', 'none');
 plot(recovery, J_min, 'b-', 'LineWidth', 1.5);
 plot(recovery, J_max_feasible, 'r-', 'LineWidth', 1.5);
