@@ -49,18 +49,19 @@ for k = 1:nR
             recovery(k), J_min(k), J_max_feasible(k));
 end
 
-save('feasibility_checks.mat', 'driving_ok', 'pressure_ok', 'dP_feasible', ...
-     'J_min', 'J_max_feasible', 'J_w', 'recovery', 'dates', 'P_max');
+save('feasibility_checks.mat', 'driving_ok', 'pressure_ok', 'dP_feasible', 'J_min', 'J_max_feasible', 'J_w', 'recovery', 'dates', 'P_max');
 
 %% Plot the feasible flux window against recovery
 figure;
 hold on; box on; grid on;
-fill([recovery, fliplr(recovery)], [J_min, fliplr(J_max_feasible)], ...
+ok = ~isnan(J_min) & ~isnan(J_max_feasible);
+fill([recovery(ok), fliplr(recovery(ok))], ...
+     [J_min(ok), fliplr(J_max_feasible(ok))], ...
      [0.3 0.6 0.9], 'FaceAlpha', 0.25, 'EdgeColor', 'none');
+%fill([recovery, fliplr(recovery)], [J_min, fliplr(J_max_feasible)], [0.3 0.6 0.9], 'FaceAlpha', 0.25, 'EdgeColor', 'none');
 plot(recovery, J_min, 'b-', 'LineWidth', 1.5);
 plot(recovery, J_max_feasible, 'r-', 'LineWidth', 1.5);
 xlabel('Recovery [%]', 'FontSize', 12);
 ylabel('Water flux [LMH]', 'FontSize', 12);
-legend('Feasible window', 'Minimum flux (driving force)', ...
-       'Maximum flux (element pressure)', 'Location', 'best');
+legend('Feasible window', 'Minimum flux (driving force)', 'Maximum flux (element pressure)', 'Location', 'best');
 hold off;
