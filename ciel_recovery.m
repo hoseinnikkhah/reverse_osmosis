@@ -1,7 +1,7 @@
 %% Vessel design
 A_m        = 41;                    % Active area per element [m2] (SW30HRLE-440)
 N_elements = [5, 6, 7];             % Elements per vessel (Codeline 80E max = 7)
-N_vessels  = 1:150;                  % Number of vessels in parallel
+N_vessels  = 1:150;                 % Number of vessels in parallel
 
 % Total active area: rows = elements per vessel, columns = number of vessels
 total_A = A_m * N_elements(:) * N_vessels;          % [m2], size 3 x 10
