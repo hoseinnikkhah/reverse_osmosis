@@ -1,4 +1,3 @@
-
 %% Vessel design
 A_m        = 41;                    % Active area per element [m2] (SW30HRLE-440)
 N_elements = [5, 6, 7];             % Elements per vessel (Codeline 80E max = 7)
@@ -39,20 +38,21 @@ for k = 1:height(config)
     Q_p_Jmax{k} = total_A * config.J_max(k) * LMH_to_m3d;   % [m3/d]
 end
 
-%% Sanity check: conventional pretreatment, 7 elements, 5 vessels, 14 LMH
+%% Sanity checks: conventional pretreatment, 7 elements, 14 LMH
 k  = find(config.Name == "Conventional pretreatment");
 iE = find(N_elements == 7);
-iV = find(N_vessels == 5);
 iJ = find(config.J_design{k} == 14);
-fprintf('Q_p = %.1f m3/d (expected ~482)\n', Q_p{k}(iE, iV, iJ));
+fprintf('Q_p = %8.1f m3/d (expected ~482)   [5 vessels]\n',   Q_p{k}(iE, find(N_vessels == 5),   iJ));
+fprintf('Q_p = %8.1f m3/d (expected ~14465) [150 vessels]\n', Q_p{k}(iE, find(N_vessels == 150), iJ));
 
 %% Plots: capacity band for each pretreatment configuration
-A_build  = unique(total_A(:));       % distinct buildable areas [m2]
-A_line   = [0; max(A_build)];        % x-range for the band edges [m2]
-Q_demand = [];                       % optional demand line [m3/d], e.g. 500
+A_build    = unique(total_A(:));     % distinct buildable areas [m2]
+A_plot_max = 15000;                  % x-axis cap for plotting [m2]; full grid reaches max(A_build)
+A_line     = [0; A_plot_max];        % x-range for the band edges [m2]
+Q_demand   = [];                     % optional demand line [m3/d], e.g. 500
 
 % Common y-limit so all configurations are directly comparable
-Q_ymax = max(A_build) * max(config.J_max) * LMH_to_m3d;
+Q_ymax = A_plot_max * max(config.J_max) * LMH_to_m3d;
 
 %% (1) Separate figure for each configuration
 for k = 1:height(config)
@@ -61,13 +61,10 @@ for k = 1:height(config)
 
     fig = figure('Name', char(config.Name(k)));
     ax  = axes(fig);
-    h   = plotCapacityBand(ax, A_build, A_line, J_lo, J_hi, ...
-                           config.J_max(k), LMH_to_m3d, Q_demand);
+    h   = plotCapacityBand(ax, A_build, A_line, J_lo, J_hi, config.J_max(k), LMH_to_m3d, Q_demand);
 
     handles = [h.band, h.max, h.des];
-    labels  = {sprintf('Design flux %g-%g LMH', J_lo, J_hi), ...
-               sprintf('Max element flux %g LMH', config.J_max(k)), ...
-               'Buildable designs'};
+    labels  = {sprintf('Design flux %g-%g LMH', J_lo, J_hi), sprintf('Max element flux %g LMH', config.J_max(k)), 'Buildable designs (sample)'};
     if ~isempty(h.dem)
         handles(end+1) = h.dem;
         labels{end+1}  = sprintf('Demand %g m^3/d', Q_demand);
@@ -89,8 +86,7 @@ for k = 1:height(config)
     J_hi = max(config.J_design{k});
 
     ax = nexttile(tl);
-    h  = plotCapacityBand(ax, A_build, A_line, J_lo, J_hi, ...
-                          config.J_max(k), LMH_to_m3d, Q_demand);
+    h  = plotCapacityBand(ax, A_build, A_line, J_lo, J_hi, config.J_max(k), LMH_to_m3d, Q_demand);
 
     title(ax, sprintf('%s (%g-%g LMH)', config.Name(k), J_lo, J_hi));
     ylim(ax, [0 Q_ymax]);
@@ -101,7 +97,7 @@ ylabel(tl, 'Permeate production Q_p [m^3/d]');
 
 % One shared legend below all tiles (flux values are in each tile title)
 handles = [h.band, h.max, h.des];
-labels  = {'Design flux range', 'Max element flux', 'Buildable designs'};
+labels  = {'Design flux range', 'Max element flux', 'Buildable designs (sample)'};
 if ~isempty(h.dem)
     handles(end+1) = h.dem;
     labels{end+1}  = 'Demand';
@@ -127,12 +123,17 @@ function h = plotCapacityBand(ax, A_build, A_line, J_lo, J_hi, J_max, c, Q_deman
     % Max element flux (upper bound only)
     h.max = plot(ax, A_line, A_line*J_max*c, 'r--', 'LineWidth', 1.2);
 
-    % Buildable designs: production range at each achievable area
-    for a = A_build'
-        plot(ax, [a a], [J_lo J_hi]*a*c, 'k-', 'LineWidth', 1);
+    % Buildable designs: restrict to the plotted range, then subsample for legibility
+    n_show = 20;                                    % target number of markers
+    A_show = A_build(A_build <= A_line(2));
+    step   = max(1, ceil(numel(A_show)/n_show));
+    A_show = A_show(1:step:end);
+
+    for a = A_show'
+        plot(ax, [a a], [J_lo J_hi]*a*c, 'k-', 'LineWidth', 0.8);
     end
-    h.des = plot(ax, A_build, A_build*J_lo*c, 'k.', 'MarkerSize', 12);
-    plot(ax, A_build, A_build*J_hi*c, 'k.', 'MarkerSize', 12);
+    h.des = plot(ax, A_show, A_show*J_lo*c, 'k.', 'MarkerSize', 10);
+    plot(ax, A_show, A_show*J_hi*c, 'k.', 'MarkerSize', 10);
 
     % Optional demand line
     h.dem = [];
@@ -140,6 +141,7 @@ function h = plotCapacityBand(ax, A_build, A_line, J_lo, J_hi, J_max, c, Q_deman
         h.dem = yline(ax, Q_demand, 'g-', 'LineWidth', 1.5);
     end
 
+    xlim(ax, [0 A_line(2)]);
     hold(ax, 'off');
 end
 
