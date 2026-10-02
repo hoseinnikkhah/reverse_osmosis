@@ -8,7 +8,7 @@ config     = data.config;          % table of 4 pretreatment configurations
 Q_p        = data.Q_p;             % 4x1 cell; Q_p{k} is [elements x vessels x flux], m3/d
 ceil_rec   = data.ceil_recovery;   % [elements x configs] = 3x4, as a fraction (0-1)
 N_elements = data.N_elements;      % [5 6 7]
-N_vessels  = data.N_vessels;       % 1:10
+N_vessels  = data.N_vessels;       % 1:150
 
 %% Recovery sweep (as a fraction, to match ceil_rec)
 R  = (30:1:60) / 100;              % 0.30 ... 0.60
@@ -47,7 +47,7 @@ Qf_vessel_max = 16;                    % [m3/h] per vessel (Lu et al. 2007, Tabl
 
 flow_ok = cell(height(config), 1);
 for k = 1:height(config)
-    Qf_vessel  = Q_f{k} ./ N_vessels / 24;     % [m3/h]; N_vessels (1x10) lines up with dimension 2
+    Qf_vessel  = Q_f{k} ./ N_vessels / 24;     % [m3/h]; N_vessels (1x150) lines up with dimension 2
     flow_ok{k} = Qf_vessel <= Qf_vessel_max;   % true where feasible (NaN entries give false)
 end
 
