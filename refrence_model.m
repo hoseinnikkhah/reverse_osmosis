@@ -1,25 +1,14 @@
-%% =====================================================================
 %  SYSTEM CURVE — required pressure vs feed flow, for one selected plant
-%
-%  Builds dP(Q_f) for every day of the year from the SD model, the
-%  recovery set point and the daily seawater conditions.
-%  Output: the pump duty — design feed flow and the annual range of
-%  required pressure — which is what pump selection needs.
-% =====================================================================
-
 clear; clc;
 
-%% ---------------------------------------------------------------
 %  1. Load upstream results
-% ---------------------------------------------------------------
+
 D = load('design_data.mat');                 % config, N_elements, N_vessels, total_A
 O = load('osmotic_pressure_recovery.mat');   % osmotic_pressure_C_avg / _C_brine, recovery
 Ad = load('A_temp_data.mat');                % A_block = [T_grid; A(T)]
 S = load('salinity_and_temp_mean.mat', 'T_daily_mean', 'dates');
 
-%% ---------------------------------------------------------------
-%  2. DESIGN SELECTION  <-- edit these four lines to switch design
-% ---------------------------------------------------------------
+%  2. DESIGN SELECTION
 %  Available designs (7 elements/vessel, 14 LMH):
 %    Vessels   A_mem(m2)   Q_p(m3/d)   Scale
 %        1        287          96      Single vessel      <-- selected
@@ -37,16 +26,13 @@ n_vess   = 1;        % vessels in parallel
 R_set    = 0.35;     % recovery set point [-]
 J_design = 14;       % nominal design flux [LMH], for the design point
 
-%% ---------------------------------------------------------------
 %  3. Resolve indices and pull the plant's parameters
-% ---------------------------------------------------------------
 k  = find(D.config.Name == cfg_name);
 iE = find(D.N_elements  == n_elem);
 iV = find(D.N_vessels   == n_vess);
 iR = find(O.recovery    == R_set*100);
 
-assert(~isempty(k)  && ~isempty(iE) && ~isempty(iV) && ~isempty(iR), ...
-       'One of the selected values is not present in the stored grids.');
+assert(~isempty(k)  && ~isempty(iE) && ~isempty(iV) && ~isempty(iR), 'One of the selected values is not present in the stored grids.');
 
 A_mem   = D.total_A(iE, iV);                        % total active area [m2]
 J_lo    = min(D.config.J_design{k});                % design flux band, low  [LMH]
@@ -60,27 +46,16 @@ A_T     = interp1(Ad.A_block(1,:), Ad.A_block(2,:), S.T_daily_mean);   % [1 x 36
 
 nD = numel(S.T_daily_mean);
 
-% --- input checks -------------------------------------------------
-assert(~any(isnan(A_T)), ...
-       'A(T) contains NaN: a daily temperature falls outside the A_block range.');
-assert(R_set <= R_ceil, ...
-       'Recovery set point %.0f%% exceeds the vessel ceiling %.1f%%.', ...
-        R_set*100, R_ceil*100);
+assert(~any(isnan(A_T)), 'A(T) contains NaN: a daily temperature falls outside the A_block range.');
+assert(R_set <= R_ceil, 'Recovery set point %.0f%% exceeds the vessel ceiling %.1f%%.',R_set*100, R_ceil*100);
 
-%% ---------------------------------------------------------------
 %  4. Flux <-> flow conversion for this plant
-%
-%     Q_p = J_w * A_mem * 24/1000        [m3/d]   flux x area
-%     Q_p = R * Q_f                      [m3/d]   recovery definition
-%  => Q_f = J_w * A_mem * 24 / (1000 * R)
-% ---------------------------------------------------------------
+
 LMH_to_m3d = 24/1000;
 flux2Qf    = @(J) J * A_mem * LMH_to_m3d / R_set;   % [LMH]   -> [m3/d]
 Qf2flux    = @(Qf) Qf * R_set * 1000 / (24 * A_mem);% [m3/d]  -> [LMH]
 
-%% ---------------------------------------------------------------
 %  5. System curve:  dP(Q_f, day) = pi(C_avg) + J_w / A(T)
-% ---------------------------------------------------------------
 J_sweep = (5 : 0.25 : J_elem)';                     % flux sweep [LMH]
 Qf      = flux2Qf(J_sweep);                         % [nQ x 1] m3/d
 nQ      = numel(Qf);
