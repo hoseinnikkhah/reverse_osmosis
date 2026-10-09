@@ -8,6 +8,8 @@ O = load('osmotic_pressure_recovery.mat');   % osmotic_pressure_C_avg / _C_brine
 Ad = load('A_temp_data.mat');                % A_block = [T_grid; A(T)]
 S = load('salinity_and_temp_mean.mat', 'T_daily_mean', 'dates');
 
+dates = S.dates;          % promote from struct so save() can find it
+
 %  2. DESIGN SELECTION
 %  Available designs (7 elements/vessel, 14 LMH):
 %    Vessels   A_mem(m2)   Q_p(m3/d)   Scale
