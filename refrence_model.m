@@ -131,43 +131,51 @@ if J_min_yr > J_lo
     fprintf('  NOTE: min viable flux exceeds the bottom of the design band.\n');
 end
 
-%% ---------------------------------------------------------------
 %  9. Plot
-% ---------------------------------------------------------------
+
 figure('Name', sprintf('System curve - %d vessel(s)', n_vess));
 hold on; box on; grid on;
 
 Qf_h = Qf / 24;                                      % x-axis in m3/h
 
+% axis ranges fitted to the data
+y_lo = floor(min(Hsys(:))/5)*5;
+y_hi = ceil(P_max/5)*5;
+x_hi = ceil(max(Qf_h));
+
 % design flux band
 xb = [flux2Qf(J_lo) flux2Qf(J_hi) flux2Qf(J_hi) flux2Qf(J_lo)]/24;
-yb = [0 0 P_max P_max];
+yb = [y_lo y_lo y_hi y_hi];
 hBand = fill(xb, yb, [0.3 0.6 0.9], 'FaceAlpha', 0.15, 'EdgeColor', 'none');
 
 hHot  = plot(Qf_h, Hsys(:, jHot),  'r-', 'LineWidth', 1.6);
 hCold = plot(Qf_h, Hsys(:, jCold), 'b-', 'LineWidth', 1.6);
-hPiB  = plot(Qf_h, pi_b(jHot)*ones(nQ,1), 'k--', 'LineWidth', 1.2);
-hPmax = yline(P_max, 'k-', 'LineWidth', 1.2);
+
+% driving-force floor, matched to each plotted day
+hPiH  = plot(Qf_h, pi_b(jHot) *ones(nQ,1), 'r--', 'LineWidth', 1.0);
+hPiC  = plot(Qf_h, pi_b(jCold)*ones(nQ,1), 'b--', 'LineWidth', 1.0);
+
+hPmax = yline(P_max, 'k-', 'LineWidth', 1.4);
 hDes  = plot(Qf_des/24, dP_des_max, 'ko', 'MarkerFaceColor', 'y', 'MarkerSize', 9);
 
 xlabel('Feed flow Q_f [m^3/h]', 'FontSize', 12);
 ylabel('Required pressure \DeltaP [bar]', 'FontSize', 12);
-title(sprintf('System curve — %d vessel(s) x %d elements, %.0f m^2, R = %.0f%%', ...
+title(sprintf('System curve — %d x %d elements, %.0f m^2, R = %.0f%%', ...
       n_vess, n_elem, A_mem, R_set*100));
-legend([hHot hCold hPiB hPmax hBand hDes], ...
+legend([hHot hCold hPiH hPiC hPmax hBand hDes], ...
        {sprintf('Hardest day (%s)', datestr(S.dates(jHot),'dd mmm')), ...
         sprintf('Easiest day (%s)', datestr(S.dates(jCold),'dd mmm')), ...
-        '\pi(C_b) — driving-force floor', ...
+        '\pi(C_b), hardest day', '\pi(C_b), easiest day', ...
         'Element pressure limit', ...
-        sprintf('Design flux band %g-%g LMH', J_lo, J_hi), ...
+        sprintf('Design band %g-%g LMH', J_lo, J_hi), ...
         'Design point'}, ...
-       'Location', 'northwest');
-ylim([0 P_max*1.05]);
+       'Location', 'southeast', 'FontSize', 9);
+xlim([0 x_hi]);
+ylim([y_lo y_hi]);
 hold off;
 
-%% ---------------------------------------------------------------
 %  10. Save
-% ---------------------------------------------------------------
+
 save('system_curve.mat', 'Hsys', 'Qf', 'J_sweep', 'feasible', ...
      'A_mem', 'R_set', 'n_elem', 'n_vess', 'cfg_name', ...
      'pi_avg', 'pi_b', 'A_T', 'flux2Qf', 'Qf2flux', ...
