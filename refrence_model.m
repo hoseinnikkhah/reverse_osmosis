@@ -77,6 +77,13 @@ J_min_day = A_T .* (pi_b - pi_avg);                  % [1 x 366] LMH
 J_min_yr  = max(J_min_day);                          % worst day
 Qf_min_yr = flux2Qf(J_min_yr);                       % [m3/d]
 
+if J_design < J_min_yr
+    warning('J_design = %g LMH is below the minimum viable flux (%.1f LMH).', J_design, J_min_yr);
+end
+if J_design < J_lo || J_design > J_hi
+    warning('J_design = %g LMH is outside the %g-%g LMH band for %s.', J_design, J_lo, J_hi, cfg_name);
+end
+
 %  7. Design point
 
 Qp_des = J_design * A_mem * LMH_to_m3d;              % permeate   [m3/d]
