@@ -63,11 +63,9 @@ nQ      = numel(Qf);
 % [nQ x 366]: rows = feed flow, columns = day
 Hsys = pi_avg + (J_sweep ./ A_T);                   % [bar], implicit expansion
 
-%% ---------------------------------------------------------------
+
 %  6. Feasibility of each (flow, day) point
-%     dP must exceed the brine osmotic pressure, and stay under the
-%     element rating.
-% ---------------------------------------------------------------
+
 P_max = 83;                                          % element max pressure [bar]
 
 driving_ok  = Hsys > pi_b;                           % [nQ x 366]
@@ -79,9 +77,8 @@ J_min_day = A_T .* (pi_b - pi_avg);                  % [1 x 366] LMH
 J_min_yr  = max(J_min_day);                          % worst day
 Qf_min_yr = flux2Qf(J_min_yr);                       % [m3/d]
 
-%% ---------------------------------------------------------------
 %  7. Design point
-% ---------------------------------------------------------------
+
 Qp_des = J_design * A_mem * LMH_to_m3d;              % permeate   [m3/d]
 Qf_des = Qp_des / R_set;                             % feed       [m3/d]
 Qb_des = Qf_des - Qp_des;                            % brine      [m3/d]
@@ -94,9 +91,8 @@ dP_des_max  = max(dP_des);
 
 Qf_vessel_h = Qf_des / n_vess / 24;                  % per-vessel feed [m3/h]
 
-%% ---------------------------------------------------------------
 %  8. Report
-% ---------------------------------------------------------------
+
 fprintf('\n=== PLANT ===\n');
 fprintf('  Pretreatment      : %s (%g-%g LMH design, %g LMH max)\n', cfg_name, J_lo, J_hi, J_elem);
 fprintf('  Vessels x elements: %d x %d = %d elements\n', n_vess, n_elem, n_vess*n_elem);
