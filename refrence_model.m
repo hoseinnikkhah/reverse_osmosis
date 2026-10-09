@@ -58,7 +58,8 @@ flux2Qf    = @(J) J * A_mem * LMH_to_m3d / R_set;   % [LMH]   -> [m3/d]
 Qf2flux    = @(Qf) Qf * R_set * 1000 / (24 * A_mem);% [m3/d]  -> [LMH]
 
 %  5. System curve:  dP(Q_f, day) = pi(C_avg) + J_w / A(T)
-J_sweep = (5 : 0.25 : J_elem)';                     % flux sweep [LMH]
+
+J_sweep = (0 : 0.25 : J_elem)';                     % flux sweep [LMH]
 Qf      = flux2Qf(J_sweep);                         % [nQ x 1] m3/d
 nQ      = numel(Qf);
 
