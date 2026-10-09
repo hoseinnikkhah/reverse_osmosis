@@ -101,6 +101,10 @@ dP_des_max  = max(dP_des);
 
 Qf_vessel_h = Qf_des / n_vess / 24;                  % per-vessel feed [m3/h]
 
+% Envelope across all days: what the pump must cover at each flow
+dP_env_max = max(Hsys, [], 2);     % [nQ x 1] worst day at each flow
+dP_env_min = min(Hsys, [], 2);     % [nQ x 1] best day at each flow
+
 %  8. Report
 
 fprintf('\n=== PLANT ===\n');
