@@ -1,178 +1,339 @@
-function out = systemCurve(n_elem, n_vess, R_set, J_design, cfg_name, show)
-% SYSTEMCURVE  Required pressure vs feed flow for one RO plant, over a full year.
+function out = systemCurve(n_elem, n_vess, R_set, J_design, cfg_name, plotMode)
+%SYSTEMCURVE  Annual system curve for one PV-SWRO design point.
 %
+%   The system curve is the pressure the high-pressure pump must deliver to
+%   sustain a given feed flow, for every day of the year:
+%
+%       dP(J,t) = pi_avg(R,t) + J / A(T(t))                        [bar]
+%       Q_f(J)  = J * A_mem * (24/1000) / R                        [m3/d]
+%
+%   Note that dP depends only on recovery, seawater salinity and seawater
+%   temperature.  It carries no pretreatment term and no membrane-area term.
+%   The pretreatment configuration fixes WHERE on that curve the plant is
+%   allowed to sit (the design flux band) and HOW FAR the curve extends
+%   (the maximum element flux).  The vessel/element count fixes only the
+%   Q_f axis, through A_mem.
+%
+% SYNTAX
 %   out = systemCurve(n_elem, n_vess)
-%   out = systemCurve(n_elem, n_vess, R_set, J_design, cfg_name, show)
+%   out = systemCurve(n_elem, n_vess, R_set, J_design, cfg_name, plotMode)
 %
-%   n_elem    elements per vessel (5, 6 or 7)
-%   n_vess    vessels in parallel
-%   R_set     recovery set point [-]        default 0.35
-%   J_design  nominal design flux [LMH]     default 14
-%   cfg_name  pretreatment configuration    default "Conventional pretreatment"
-%   show      print report and plot         default false
+% INPUTS
+%   n_elem    elements per pressure vessel                 5, 6 or 7
+%   n_vess    number of pressure vessels                   1 ... 150
+%   R_set     system recovery, fraction                    default 0.35
+%   J_design  design permeate flux, LMH                    default = midpoint
+%             of this configuration's design band (14.5 / 15.5 / 17 / 19)
+%   cfg_name  pretreatment configuration, one of
+%               "UF + B-free"                   band 17-21, J_max 38
+%               "Well/open intake + UF"         band 15-19, J_max 36
+%               "Generic membrane filtration"   band 14-17, J_max 34
+%               "Conventional pretreatment"     band 12-17, J_max 32
+%             default "Conventional pretreatment"
+%   plotMode  "off" | "new" | "add"                        default "off"
+%               "off"  no figure
+%               "new"  clear the shared figure, then draw this design
+%               "add"  overlay this design on the shared figure
 %
-%   Returns a struct with the system curve, feasibility masks, design point
-%   and pump duty.
+% OUTPUT  out  struct with the curve, the feasibility masks, the design
+%              point and the pump duty.
+%
+% REQUIRES  design_data.mat, osmotic_pressure_recovery.mat,
+%           A_temp_data.mat, salinity_and_temp_mean.mat
 
-    if nargin < 3 || isempty(R_set),    R_set    = 0.35; end
-    if nargin < 4 || isempty(J_design), J_design = 14;   end
-    if nargin < 5 || isempty(cfg_name), cfg_name = "Conventional pretreatment"; end
-    if nargin < 6 || isempty(show),     show     = false; end
+% ------------------------------------------------------------------------
+% 0.  defaults
+% ------------------------------------------------------------------------
+if nargin < 3 || isempty(R_set),    R_set    = 0.35;                       end
+if nargin < 4,                      J_design = [];                         end
+if nargin < 5 || isempty(cfg_name), cfg_name = "Conventional pretreatment"; end
+if nargin < 6 || isempty(plotMode), plotMode = "off";                      end
 
-    %% 1. Load upstream results (cached across calls)
-    persistent D O Ad S
-    if isempty(D)
-        D  = load('design_data.mat');
-        O  = load('osmotic_pressure_recovery.mat');
-        Ad = load('A_temp_data.mat');
-        S  = load('salinity_and_temp_mean.mat', 'T_daily_mean', 'dates');
-    end
-    dates = S.dates;
+cfg_name = string(cfg_name);
+plotMode = lower(string(plotMode));
+if ~ismember(plotMode, ["off" "new" "add"])
+    error('systemCurve: plotMode must be "off", "new" or "add".');
+end
 
-    %% 2. Resolve indices and pull the plant's parameters
-    k  = find(D.config.Name == cfg_name);
-    iE = find(D.N_elements  == n_elem);
-    iV = find(D.N_vessels   == n_vess);
-    iR = find(O.recovery    == R_set*100);
+% ------------------------------------------------------------------------
+% 1.  cached inputs  (loaded once per MATLAB session)
+% ------------------------------------------------------------------------
+persistent D O Ad S
+if isempty(D)
+    D  = load('design_data.mat');                 % config, ceil_recovery, N_elements, N_vessels, total_A
+    O  = load('osmotic_pressure_recovery.mat');   % recovery, osmotic_pressure_C_avg, osmotic_pressure_C_brine
+    Ad = load('A_temp_data.mat');                 % A_block = [T ; A(T) in LMH/bar]
+    S  = load('salinity_and_temp_mean.mat','T_daily_mean','S_daily_mean','dates');
+end
+dates = S.dates;                                  % promote out of the struct
 
-    assert(~isempty(k) && ~isempty(iE) && ~isempty(iV) && ~isempty(iR), ...
-           'One of the selected values is not present in the stored grids.');
+% ------------------------------------------------------------------------
+% 2.  index lookups
+% ------------------------------------------------------------------------
+k  = find(D.config.Name == cfg_name, 1);
+iE = find(D.N_elements  == n_elem,   1);
+iV = find(D.N_vessels   == n_vess,   1);
+iR = find(abs(O.recovery - R_set*100) < 1e-9, 1);
 
-    A_mem  = D.total_A(iE, iV);
-    J_lo   = min(D.config.J_design{k});
-    J_hi   = max(D.config.J_design{k});
-    J_elem = D.config.J_max(k);
-    R_ceil = D.ceil_recovery(iE, k);
+if isempty(k)
+    error('systemCurve: unknown configuration "%s". Valid: %s', ...
+          cfg_name, strjoin(cellstr(D.config.Name), ' | '));
+end
+if isempty(iE)
+    error('systemCurve: n_elem = %g not in design grid [%s].', ...
+          n_elem, num2str(D.N_elements));
+end
+if isempty(iV)
+    error('systemCurve: n_vess = %g not in design grid 1..%d.', ...
+          n_vess, max(D.N_vessels));
+end
+if isempty(iR)
+    error('systemCurve: R_set = %.3f not in the stored recovery grid (%g..%g %%).', ...
+          R_set, min(O.recovery), max(O.recovery));
+end
 
-    pi_avg = O.osmotic_pressure_C_avg(iR, :);
-    pi_b   = O.osmotic_pressure_C_brine(iR, :);
-    A_T    = interp1(Ad.A_block(1,:), Ad.A_block(2,:), S.T_daily_mean);
+% ------------------------------------------------------------------------
+% 3.  configuration-dependent limits  (THE ONLY THINGS cfg_name CHANGES)
+% ------------------------------------------------------------------------
+J_band = D.config.J_design{k};
+J_lo   = min(J_band);                 % bottom of design band,  LMH
+J_hi   = max(J_band);                 % top of design band,     LMH
+J_elem = D.config.J_max(k);           % max element flux,       LMH
+r_e    = D.config.rec_max(k)/100;     % max element recovery,   fraction
+R_ceil = D.ceil_recovery(iE,k);       % 1-(1-r_e)^n_elem,       fraction
 
-    assert(~any(isnan(A_T)), ...
-           'A(T) contains NaN: a daily temperature falls outside the A_block range.');
-    assert(R_set <= R_ceil, ...
-           'Recovery set point %.0f%% exceeds the vessel ceiling %.1f%%.', R_set*100, R_ceil*100);
+% default design flux = band midpoint, snapped to the 0.5 LMH grid
+if isempty(J_design)
+    J_design = round(((J_lo + J_hi)/2)/0.5)*0.5;
+end
+inBand = (J_design >= J_lo) && (J_design <= J_hi);
+if ~inBand
+    warning('systemCurve:fluxOutOfBand', ...
+        ['J_design = %.2f LMH is outside the design band of "%s" ' ...
+         '(%.1f-%.1f LMH). Band midpoint is %.1f LMH.'], ...
+         J_design, cfg_name, J_lo, J_hi, (J_lo+J_hi)/2);
+end
+if R_set >= R_ceil
+    warning('systemCurve:aboveCeiling', ...
+        ['R_set = %.1f %% is at or above the staging ceiling %.1f %% ' ...
+         '(%d elements, r_e,max = %.0f %%).'], ...
+         R_set*100, R_ceil*100, n_elem, r_e*100);
+end
 
-    %% 3. Flux <-> flow conversion for this plant
-    LMH_to_m3d = 24/1000;
-    flux2Qf = @(J)  J  * A_mem * LMH_to_m3d / R_set;
-    Qf2flux = @(Qf) Qf * R_set * 1000 / (24 * A_mem);
+% ------------------------------------------------------------------------
+% 4.  state variables
+% ------------------------------------------------------------------------
+A_mem  = D.total_A(iE,iV);                       % installed membrane area, m2
+pi_avg = O.osmotic_pressure_C_avg(iR,:);         % pi at log-mean-ish C_avg, bar  [1 x 366]
+pi_b   = O.osmotic_pressure_C_brine(iR,:);       % pi at brine C_b,          bar  [1 x 366]
+A_T    = interp1(Ad.A_block(1,:), Ad.A_block(2,:), S.T_daily_mean);  % LMH/bar  [1 x 366]
 
-    %% 4. System curve
-    J_sweep = (0 : 0.25 : J_elem)';
-    Qf      = flux2Qf(J_sweep);
-    nQ      = numel(Qf);
-    Hsys    = pi_avg + (J_sweep ./ A_T);          % [nQ x 366] bar
+LMH_to_m3d = 24/1000;
+flux2Qf = @(J)  J  * A_mem * LMH_to_m3d / R_set;         % LMH  -> m3/d
+Qf2flux = @(Qf) Qf * R_set * 1000 / (24 * A_mem);        % m3/d -> LMH
 
-    %% 5. Feasibility
-    P_max       = 83;
-    driving_ok  = Hsys > pi_b;
-    pressure_ok = Hsys < P_max;
-    feasible    = driving_ok & pressure_ok;
+% ------------------------------------------------------------------------
+% 5.  the system curve
+% ------------------------------------------------------------------------
+J_sweep = (0 : 0.25 : J_elem)';                  % starts at 0 so the intercept is pi(C_avg)
+Qf      = flux2Qf(J_sweep);                      % m3/d
+Hsys    = pi_avg + (J_sweep ./ A_T);             % bar  [nQ x 366]
 
-    J_min_day = A_T .* (pi_b - pi_avg);
-    J_min_yr  = max(J_min_day);
-    Qf_min_yr = flux2Qf(J_min_yr);
+dP_env_max = max(Hsys, [], 2);                   % hardest day of the year, per flux
+dP_env_min = min(Hsys, [], 2);                   % easiest day of the year, per flux
 
-    if J_design < J_min_yr
-        warning('J_design = %g LMH is below the minimum viable flux (%.1f LMH).', ...
-                J_design, J_min_yr);
-    end
-    if J_design < J_lo || J_design > J_hi
-        warning('J_design = %g LMH is outside the %g-%g LMH band for %s.', ...
-                J_design, J_lo, J_hi, cfg_name);
-    end
+% ------------------------------------------------------------------------
+% 6.  feasibility
+% ------------------------------------------------------------------------
+P_max = 83;                                      % element / vessel pressure rating, bar
 
-    %% 6. Design point
-    Qp_des = J_design * A_mem * LMH_to_m3d;
-    Qf_des = Qp_des / R_set;
-    Qb_des = Qf_des - Qp_des;
+driving_ok  = Hsys >  pi_b;                      % net driving force positive
+pressure_ok = Hsys <  P_max;                     % within the pressure rating
+feasible    = driving_ok & pressure_ok;
 
-    dP_des     = pi_avg + J_design ./ A_T;
-    dP_des_min = min(dP_des);
-    dP_des_max = max(dP_des);
-    [~, jHot]  = max(dP_des);
-    [~, jCold] = min(dP_des);
+% minimum flux that still produces permeate, exact closed form:
+%   J_min = A(T) * [pi(C_b) - pi(C_avg)] = A(T) * pi(C_f) * R / (2(1-R))
+% -> pretreatment-independent; set only by recovery, salinity, temperature
+J_min_day = A_T .* (pi_b - pi_avg);              % LMH  [1 x 366]
+[J_min_yr, iHard] = max(J_min_day);              % worst (highest-floor) day
+[~, iEasy]        = min(J_min_day);
+Qf_min_yr = flux2Qf(J_min_yr);                   % m3/d
 
-    Qf_vessel_h = Qf_des / n_vess / 24;
-    P_hyd       = Qf_des/24/3600 * dP_des_max*1e5/1000;   % [kW]
+turndown = 1 - J_min_yr / J_design;              % usable flux turndown at the design point
 
-    dP_env_max = max(Hsys, [], 2);
-    dP_env_min = min(Hsys, [], 2);
+% ------------------------------------------------------------------------
+% 7.  design point and pump duty
+% ------------------------------------------------------------------------
+Q_p = J_design * A_mem * LMH_to_m3d;             % permeate, m3/d
+Q_f = Q_p / R_set;                               % feed,     m3/d
+Q_b = Q_f - Q_p;                                 % brine,    m3/d
 
-    %% 7. Pack output
-    out = struct( ...
-        'n_elem', n_elem, 'n_vess', n_vess, 'R_set', R_set, ...
-        'J_design', J_design, 'cfg_name', cfg_name, ...
-        'A_mem', A_mem, 'R_ceil', R_ceil, ...
-        'J_lo', J_lo, 'J_hi', J_hi, 'J_elem', J_elem, 'P_max', P_max, ...
-        'J_sweep', J_sweep, 'Qf', Qf, 'Hsys', Hsys, ...
-        'dP_env_max', dP_env_max, 'dP_env_min', dP_env_min, ...
-        'feasible', feasible, 'driving_ok', driving_ok, 'pressure_ok', pressure_ok, ...
-        'J_min_day', J_min_day, 'J_min_yr', J_min_yr, 'Qf_min_yr', Qf_min_yr, ...
-        'Qp_des', Qp_des, 'Qf_des', Qf_des, 'Qb_des', Qb_des, ...
-        'dP_des', dP_des, 'dP_des_min', dP_des_min, 'dP_des_max', dP_des_max, ...
-        'jHot', jHot, 'jCold', jCold, 'Qf_vessel_h', Qf_vessel_h, 'P_hyd', P_hyd, ...
-        'pi_avg', pi_avg, 'pi_b', pi_b, 'A_T', A_T, 'dates', dates, ...
-        'flux2Qf', flux2Qf, 'Qf2flux', Qf2flux);
+dP_des      = pi_avg + J_design ./ A_T;          % required pressure at J_design, bar [1 x 366]
+dP_des_max  = max(dP_des);
+dP_des_min  = min(dP_des);
+dP_des_mean = mean(dP_des);
 
-    if ~show, return; end
+% hydraulic power of the HP pump at the design point, kW
+P_hyd = dP_des * 1e5 .* (Q_f/86400) / 1000;
 
-    %% 8. Report
-    fprintf('\n=== PLANT ===\n');
-    fprintf('  Pretreatment      : %s (%g-%g LMH design, %g LMH max)\n', cfg_name, J_lo, J_hi, J_elem);
-    fprintf('  Vessels x elements: %d x %d = %d elements\n', n_vess, n_elem, n_vess*n_elem);
-    fprintf('  Active area       : %.0f m2\n', A_mem);
-    fprintf('  Recovery set point: %.0f%%  (vessel ceiling %.1f%%)\n', R_set*100, R_ceil*100);
+label = sprintf('%s | %de x %dv | R=%.0f%% | J=%.1f LMH', ...
+                shortName(cfg_name), n_elem, n_vess, R_set*100, J_design);
 
-    fprintf('\n=== DESIGN POINT (%g LMH) ===\n', J_design);
-    fprintf('  Permeate   Q_p    : %8.1f m3/d  (%6.2f m3/h)\n', Qp_des, Qp_des/24);
-    fprintf('  Feed       Q_f    : %8.1f m3/d  (%6.2f m3/h)\n', Qf_des, Qf_des/24);
-    fprintf('  Brine      Q_b    : %8.1f m3/d  (%6.2f m3/h)\n', Qb_des, Qb_des/24);
-    fprintf('  Feed per vessel   : %8.2f m3/h  (limit ~16)\n', Qf_vessel_h);
+% ------------------------------------------------------------------------
+% 8.  pack output
+% ------------------------------------------------------------------------
+out = struct( ...
+    'cfg_name',    cfg_name,      'n_elem',      n_elem, ...
+    'n_vess',      n_vess,        'R_set',       R_set, ...
+    'J_design',    J_design,      'J_lo',        J_lo, ...
+    'J_hi',        J_hi,          'J_elem',      J_elem, ...
+    'r_e',         r_e,           'R_ceil',      R_ceil, ...
+    'inBand',      inBand,        'A_mem',       A_mem, ...
+    'J_sweep',     J_sweep,       'Qf_sweep',    Qf, ...
+    'Hsys',        Hsys,          'dP_env_max',  dP_env_max, ...
+    'dP_env_min',  dP_env_min,    'feasible',    feasible, ...
+    'driving_ok',  driving_ok,    'pressure_ok', pressure_ok, ...
+    'J_min_day',   J_min_day,     'J_min_yr',    J_min_yr, ...
+    'Qf_min_yr',   Qf_min_yr,     'turndown',    turndown, ...
+    'Q_p',         Q_p,           'Q_f',         Q_f, ...
+    'Q_b',         Q_b,           'dP_des',      dP_des, ...
+    'dP_des_max',  dP_des_max,    'dP_des_min',  dP_des_min, ...
+    'dP_des_mean', dP_des_mean,   'P_hyd',       P_hyd, ...
+    'P_hyd_max',   max(P_hyd),    'P_hyd_min',   min(P_hyd), ...
+    'date_hard',   dates(iHard),  'date_easy',   dates(iEasy), ...
+    'pi_avg',      pi_avg,        'pi_b',        pi_b, ...
+    'A_T',         A_T,           'dates',       dates, ...
+    'P_max',       P_max,         'label',       string(label), ...
+    'flux2Qf',     flux2Qf,       'Qf2flux',     Qf2flux);
 
-    fprintf('\n=== PUMP DUTY ===\n');
-    fprintf('  Flow at design    : %.2f m3/h\n', Qf_des/24);
-    fprintf('  Required pressure : %.1f - %.1f bar over the year\n', dP_des_min, dP_des_max);
-    fprintf('    hardest day     : %s  (%.1f bar)\n', datestr(dates(jHot),  'dd mmm'), dP_des_max);
-    fprintf('    easiest day     : %s  (%.1f bar)\n', datestr(dates(jCold), 'dd mmm'), dP_des_min);
-    fprintf('  Hydraulic power   : %.1f kW at design point\n', P_hyd);
+% ------------------------------------------------------------------------
+% 9.  plot
+% ------------------------------------------------------------------------
+if plotMode ~= "off"
+    plotSystemCurve(out, plotMode);
+end
 
-    fprintf('\n=== OPERATING RANGE ===\n');
-    fprintf('  Min viable flux   : %.1f LMH (worst day) -> Q_f = %.2f m3/h\n', J_min_yr, Qf_min_yr/24);
-    fprintf('  Design flux band  : %g - %g LMH          -> Q_f = %.2f - %.2f m3/h\n', ...
-            J_lo, J_hi, flux2Qf(J_lo)/24, flux2Qf(J_hi)/24);
-    fprintf('  Turndown below design point: %.0f%%\n', (1 - Qf_min_yr/Qf_des)*100);
-    if J_min_yr > J_lo
-        fprintf('  NOTE: min viable flux exceeds the bottom of the design band.\n');
-    end
+end % ===================== main function ends ==========================
 
-    %% 9. Plot
-    figure('Name', sprintf('System curve - %d vessel(s)', n_vess));
-    hold on; box on; grid on;
 
-    Qf_h = Qf / 24;
-    y_lo = floor(min(Hsys(:))/5)*5;
-    y_hi = ceil(P_max/5)*5;
+% ========================================================================
+function plotSystemCurve(out, plotMode)
+%PLOTSYSTEMCURVE  Draw one design onto the shared, re-entrant figure.
+%   Left  panel: flux space  -> the curve itself, plus this design's band.
+%   Right panel: feed-flow space -> where this design sits in absolute flow.
 
-    xb = [flux2Qf(J_lo) flux2Qf(J_hi) flux2Qf(J_hi) flux2Qf(J_lo)]/24;
-    hBand = fill(xb, [y_lo y_lo y_hi y_hi], [0.3 0.6 0.9], 'FaceAlpha', 0.15, 'EdgeColor', 'none');
-    hAll  = plot(Qf_h, Hsys, '-', 'Color', [0.75 0.75 0.75], 'LineWidth', 0.3);
-    hMax  = plot(Qf_h, dP_env_max, 'r-', 'LineWidth', 2.0);
-    hMin  = plot(Qf_h, dP_env_min, 'b-', 'LineWidth', 2.0);
-    hJmin = xline(Qf_min_yr/24, 'm-', 'LineWidth', 1.5);
-    hPmax = yline(P_max, 'k-', 'LineWidth', 1.4);
-    hDes  = plot(Qf_des/24, dP_des_max, 'ko', 'MarkerFaceColor', 'y', 'MarkerSize', 9);
+TAG = 'PVSWRO_systemCurve';
+f = findobj('Type','figure','Tag',TAG);
 
-    xlabel('Feed flow Q_f [m^3/h]', 'FontSize', 12);
-    ylabel('Required pressure \DeltaP [bar]', 'FontSize', 12);
-    title(sprintf('System curve, full year — %d x %d elements, %.0f m^2, R = %.0f%%', ...
-          n_vess, n_elem, A_mem, R_set*100));
-    legend([hMax hMin hAll(1) hJmin hPmax hBand hDes], ...
-           {'Worst day at each flow', 'Best day at each flow', 'Individual days (366)', ...
-            'Min viable flow (all days)', 'Element pressure limit', ...
-            sprintf('Design band %g-%g LMH', J_lo, J_hi), 'Design point'}, ...
-           'Location', 'southeast', 'FontSize', 9);
-    xlim([0 ceil(max(Qf_h))]); ylim([y_lo y_hi]);
-    hold off;
+if plotMode == "new" || isempty(f)
+    if ~isempty(f), clf(f(1)); fig = f(1); else, fig = figure; end
+    set(fig,'Tag',TAG,'Name','PV-SWRO system curve','Color','w', ...
+            'Position',[80 80 1180 520]);
+    axL = subplot(1,2,1,'Parent',fig);  hold(axL,'on');  grid(axL,'on');  box(axL,'on');
+    axR = subplot(1,2,2,'Parent',fig);  hold(axR,'on');  grid(axR,'on');  box(axR,'on');
+    setappdata(fig,'axL',axL);  setappdata(fig,'axR',axR);
+    setappdata(fig,'nSeries',0);
+    setappdata(fig,'cfgDrawn',strings(0,1));
+    setappdata(fig,'QfMax',0);
+    setappdata(fig,'QfMin',Inf);
+    setappdata(fig,'JMax',0);
+else
+    fig = f(1);
+    figure(fig);
+end
+
+axL = getappdata(fig,'axL');
+axR = getappdata(fig,'axR');
+n   = getappdata(fig,'nSeries');
+C   = lines(8);
+col = C(mod(n,8)+1,:);
+
+% ---- once per figure: the 366 daily curves and the pressure rating ----
+if n == 0
+    plot(axL, out.J_sweep, out.Hsys, '-', 'Color',[0.80 0.84 0.90], ...
+         'LineWidth',0.3, 'HandleVisibility','off');
+    yline(axL, out.P_max, 'r--', 'LineWidth',1.1, ...
+          'Label','element rating 83 bar', 'LabelHorizontalAlignment','left', ...
+          'HandleVisibility','off');
+    yline(axR, out.P_max, 'r--', 'LineWidth',1.1, 'HandleVisibility','off');
+end
+
+% ---- once per configuration: shade its design flux band ----------------
+drawn = getappdata(fig,'cfgDrawn');
+if ~any(drawn == out.cfg_name)
+    yl = [0 out.P_max];
+    patch(axL, [out.J_lo out.J_hi out.J_hi out.J_lo], [yl(1) yl(1) yl(2) yl(2)], ...
+          col, 'FaceAlpha',0.10, 'EdgeColor',col, 'LineStyle',':', ...
+          'HandleVisibility','off');
+    text(axL, (out.J_lo+out.J_hi)/2, out.P_max-2, ...
+         sprintf('%.0f-%.0f', out.J_lo, out.J_hi), ...
+         'Color',col*0.7, 'FontSize',8, 'HorizontalAlignment','center');
+    setappdata(fig,'cfgDrawn',[drawn; out.cfg_name]);
+end
+
+% ---- left panel: annual envelope in flux space -------------------------
+plot(axL, out.J_sweep, out.dP_env_max, '-',  'Color',col, 'LineWidth',2.0, ...
+     'DisplayName',out.label);
+plot(axL, out.J_sweep, out.dP_env_min, '--', 'Color',col, 'LineWidth',1.2, ...
+     'HandleVisibility','off');
+plot(axL, out.J_design, out.dP_des_max, 'o', 'MarkerSize',7, ...
+     'MarkerFaceColor',col, 'MarkerEdgeColor','k', 'HandleVisibility','off');
+xline(axL, out.J_min_yr, ':', 'Color',col, 'LineWidth',1.3, ...
+      'HandleVisibility','off');
+
+% ---- right panel: annual envelope in feed-flow space -------------------
+Qh = out.Qf_sweep/24;                                  % m3/h
+plot(axR, Qh, out.dP_env_max, '-',  'Color',col, 'LineWidth',2.0, ...
+     'DisplayName',out.label);
+plot(axR, Qh, out.dP_env_min, '--', 'Color',col, 'LineWidth',1.2, ...
+     'HandleVisibility','off');
+plot(axR, out.Q_f/24, out.dP_des_max, 'o', 'MarkerSize',7, ...
+     'MarkerFaceColor',col, 'MarkerEdgeColor','k', 'HandleVisibility','off');
+
+% ---- axes bookkeeping --------------------------------------------------
+setappdata(fig,'QfMax', max(getappdata(fig,'QfMax'), max(Qh)));
+setappdata(fig,'QfMin', min(getappdata(fig,'QfMin'), max(Qh)));
+setappdata(fig,'JMax',  max(getappdata(fig,'JMax'),  out.J_elem));
+setappdata(fig,'nSeries', n+1);
+
+if n == 0, setappdata(fig,'YLo',Inf); end
+setappdata(fig,'YLo', min(getappdata(fig,'YLo'), min(out.dP_env_min)));
+y_lo = max(0, floor(getappdata(fig,'YLo')/5)*5 - 5);
+y_hi = ceil(out.P_max/5)*5;
+
+xlabel(axL,'Permeate flux  J_w  (LMH)');
+ylabel(axL,'Required pressure  \DeltaP  (bar)');
+title (axL,'System curve - flux space');
+xlim  (axL,[0 getappdata(fig,'JMax')]);
+ylim  (axL,[y_lo y_hi]);
+legend(axL,'Location','northwest','FontSize',8,'Box','off');
+
+QfMax = getappdata(fig,'QfMax');
+QfMin = getappdata(fig,'QfMin');
+xlabel(axR,'Feed flow  Q_f  (m^3/h)');
+ylabel(axR,'Required pressure  \DeltaP  (bar)');
+title (axR,'System curve - pump duty space');
+ylim  (axR,[y_lo y_hi]);
+if QfMax/max(QfMin,eps) > 20
+    set(axR,'XScale','log');
+    xlim(axR,[max(0.1,QfMin/3) QfMax*1.1]);
+else
+    set(axR,'XScale','linear');
+    xlim(axR,[0 QfMax*1.05]);
+end
+legend(axR,'Location','northwest','FontSize',8,'Box','off');
+
+end % ===================== plot helper ends ============================
+
+
+% ========================================================================
+function s = shortName(cfg)
+%SHORTNAME  Compact configuration tag for legends.
+switch cfg
+    case "UF + B-free",                 s = 'UF+Bfree';
+    case "Well/open intake + UF",       s = 'Well+UF';
+    case "Generic membrane filtration", s = 'GenMF';
+    case "Conventional pretreatment",   s = 'Conv';
+    otherwise,                          s = char(cfg);
+end
 end
