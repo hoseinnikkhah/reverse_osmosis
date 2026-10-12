@@ -1,26 +1,3 @@
-%% design_map.m
-%  The design map: every pretreatment configuration x every plant size,
-%  on one figure.
-%
-%  In flux space there is only ONE system curve for the whole study - it
-%  depends on recovery and site seawater, not on pretreatment and not on
-%  membrane area.  So the design map cannot live there.  It lives in
-%  (capacity, pressure), where both degrees of freedom are visible:
-%
-%     pretreatment -> design flux J_d -> required pressure dP and SEC
-%                                        (vertical position)
-%     plant size   -> membrane area   -> Q_p and Q_f
-%                                        (horizontal position)
-%
-%  Each configuration therefore plots as a horizontal row of design points:
-%  constant pressure, constant specific energy, capacity sweeping across
-%  decades.  Reading the map: pick a target capacity on the x axis, go up,
-%  and the four rows give the pressure and energy price of each
-%  pretreatment option at that capacity.
-%
-%  Inputs : design_data.mat, osmotic_pressure_recovery.mat,
-%           A_temp_data.mat, salinity_and_temp_mean.mat
-%  Output : design_map.csv  (+ one figure)
 
 clear; close all; clc;
 fprintf('>>> running design_map.m  (pretreatment x plant size, one figure)\n');
@@ -34,9 +11,7 @@ P_max    = 83;                             % element pressure rating, bar
 eta_pump = 0.85;                           % hydraulic x motor x VFD
 DEMAND   = [100 1000 10000];               % optional capacity targets, m3/d ([] for none)
 rho_sw   = 1025;  g = 9.81;
-% -----------------------------------------------------------------------
 
-%% ====================== 2.  LOAD  =====================================
 D  = load('design_data.mat');
 O  = load('osmotic_pressure_recovery.mat');
 Ad = load('A_temp_data.mat');
@@ -58,7 +33,6 @@ nC = size(D.config,1);
 nV = numel(VESSELS);
 col = lines(nC);
 
-%% ====================== 3.  BUILD THE MAP  ============================
 Qp   = zeros(nC,nV);   Qf    = zeros(nC,nV);
 Pel  = zeros(nC,nV);   Amem  = zeros(1,nV);
 dPhi = zeros(nC,1);    dPlo  = zeros(nC,1);
@@ -143,7 +117,6 @@ ylabel('Equivalent head  H  (m)');
 set(gca,'YColor',[0.35 0.35 0.35]);
 yyaxis left
 
-%% ====================== 5.  TABLE  ====================================
 nR = nC*nV;
 Configuration = strings(nR,1);  Vessels    = zeros(nR,1);
 Area_m2       = zeros(nR,1);    Jd_LMH     = zeros(nR,1);
