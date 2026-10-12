@@ -1,5 +1,8 @@
-%% design_point.m
+%% systemCurve.m
 %  System curve for ONE PV-SWRO design point.
+%
+%  Run it directly to study one design interactively, or let
+%  run_all_designs.m drive it in batch over a whole design list.
 %
 %  dP(J,t) = pi_avg(R,t) + J / A(T(t))                             [bar]
 %  Q_f(J)  = J * A_mem * (24/1000) / R                             [m3/d]
@@ -12,26 +15,36 @@
 %
 %  Inputs : design_data.mat, osmotic_pressure_recovery.mat,
 %           A_temp_data.mat, salinity_and_temp_mean.mat
-%  Output : system_curve.mat  (+ two figures)
-
-clear; close all; clc;
-fprintf('>>> running design_point.m  (ONE design, two figures)\n');
+%  Output : system_curve_<config>_<e>e_<v>v_R<rr>.mat   (+ two figures)
 
 %% ====================== 1.  DESIGN SELECTION  ==========================
-% ---- edit this block only ---------------------------------------------
-cfg_name = "Conventional pretreatment";
-%          "UF + B-free"                   band 17-21,  J_max 38,  r_e 16%
-%          "Well/open intake + UF"         band 15-19,  J_max 36,  r_e 15%
-%          "Generic membrane filtration"   band 14-17,  J_max 34,  r_e 14%
-%          "Conventional pretreatment"     band 12-17,  J_max 32,  r_e 13%
+if exist('BATCH_MODE','var') && BATCH_MODE
+    % Driven by run_all_designs.m, which supplies cfg_name, n_elem,
+    % n_vess, R_set, J_design and SHOW_FIGS.  Do not clear the workspace.
+else
+    clear; close all; clc;
 
-n_elem   = 7;          % elements per pressure vessel        5, 6 or 7
-n_vess   = 1;          % number of pressure vessels          1 ... 150
-R_set    = 0.35;       % system recovery, fraction
-J_design = [];         % design flux, LMH;  [] = midpoint of the band
-P_max    = 83;         % element / vessel pressure rating, bar
-rho_sw   = 1025;       % seawater density, kg/m3   (bar -> m head)
-g        = 9.81;       % m/s2
+    % ---- edit this block only -----------------------------------------
+    cfg_name = "Conventional pretreatment";
+    %          "UF + B-free"                   band 17-21,  J_max 38,  r_e 16%
+    %          "Well/open intake + UF"         band 15-19,  J_max 36,  r_e 15%
+    %          "Generic membrane filtration"   band 14-17,  J_max 34,  r_e 14%
+    %          "Conventional pretreatment"     band 12-17,  J_max 32,  r_e 13%
+
+    n_elem   = 7;      % elements per pressure vessel        5, 6 or 7
+    n_vess   = 1;      % number of pressure vessels          1 ... 150
+    R_set    = 0.35;   % system recovery, fraction
+    J_design = [];     % design flux, LMH;  [] = midpoint of this config's band
+    % -------------------------------------------------------------------
+
+    SHOW_FIGS = true;
+    fprintf('>>> running systemCurve.m  (ONE design, two figures)\n');
+end
+
+% ---- fixed for the whole study, not design inputs ----------------------
+P_max  = 83;           % element / vessel pressure rating, bar  (datasheet)
+rho_sw = 1025;         % seawater density, kg/m3   (bar -> m head)
+g      = 9.81;         % m/s2
 % -----------------------------------------------------------------------
 
 %% ====================== 2.  LOAD INPUTS  ==============================
@@ -114,6 +127,10 @@ P_hyd_max = max(P_hyd);
 P_hyd_min = min(P_hyd);
 
 %% ====================== 9.  REPORT  ===================================
+if ~SHOW_FIGS
+    fprintf('  %-30s %de x %3dv  A %7.0f m2  Q_p %9.1f m3/d  dP %5.2f-%5.2f bar  P %8.2f kW\n', ...
+            cfg_name, n_elem, n_vess, A_mem, Q_p, dP_des_min, dP_des_max, P_hyd_max);
+else
 fprintf('\n=============== PV-SWRO DESIGN POINT ===============\n');
 fprintf('Pretreatment      : %s\n', cfg_name);
 fprintf('Train             : %d elements x %d vessels = %.0f m2\n', n_elem, n_vess, A_mem);
@@ -133,9 +150,11 @@ fprintf('Easiest day       : %s  (%.2f bar)\n', datestr(dates(iEasy),'dd mmm yyy
 fprintf('Days feasible     : %d / %d at the design flux\n', ...
         sum(interp1(J_sweep, double(feasible), J_design) > 0.5), numel(dates));
 fprintf('====================================================\n\n');
+end
 
 %% ================= 10.  FIGURE 1 - FLUX SPACE  ========================
-figure('Name','design_point 1/2 - flux space','Color','w','Position',[80 420 640 500]);
+if SHOW_FIGS
+figure('Name','systemCurve 1/2 - flux space','Color','w','Position',[80 420 640 500]);
 hold on; grid on; box on;
 
 plot(J_sweep, Hsys, '-', 'Color',[0.80 0.84 0.90], 'LineWidth',0.3, ...
@@ -165,7 +184,7 @@ legend([hMax hMin hBand hDes], ...
 % Same curve, x-axis converted from flux to real feed flow.  This is the
 % plane in which a pump is selected: lay the manufacturer's H(Q) curve on
 % top, and the intersection with the system curve is the operating point.
-figure('Name','design_point 2/2 - pump duty space','Color','w','Position',[740 420 640 500]);
+figure('Name','systemCurve 2/2 - pump duty space','Color','w','Position',[740 420 640 500]);
 hold on; grid on; box on;
 
 Qh = Qf_swp/24;                                              % m3/h
@@ -194,14 +213,26 @@ ylim([y_lo ceil(P_max/5)*5] * bar2m);
 ylabel('Equivalent head  H  (m)');
 set(gca,'YColor',[0.35 0.35 0.35]);
 yyaxis left
+end
 
 %% ====================== 12.  SAVE  ====================================
 % Everything the PV / energy layer needs downstream, nothing more.
+% The filename carries the design identity, so running several designs
+% accumulates files instead of overwriting one.
+tagMap = ["UF + B-free"                 "UFBfree" ; ...
+          "Well/open intake + UF"       "WellUF"  ; ...
+          "Generic membrane filtration" "GenMF"   ; ...
+          "Conventional pretreatment"   "Conv"    ];
+cfgTag  = tagMap(tagMap(:,1) == cfg_name, 2);
+outfile = sprintf('system_curve_%s_%de_%dv_R%02.0f.mat', ...
+                  cfgTag, n_elem, n_vess, R_set*100);
+
 design = struct('cfg_name',cfg_name, 'n_elem',n_elem, 'n_vess',n_vess, ...
                 'R_set',R_set, 'J_design',J_design, 'A_mem',A_mem, ...
-                'J_lo',J_lo, 'J_hi',J_hi, 'J_elem',J_elem, 'R_ceil',R_ceil);
+                'J_lo',J_lo, 'J_hi',J_hi, 'J_elem',J_elem, 'R_ceil',R_ceil, ...
+                'tag',string(cfgTag), 'file',string(outfile));
 
-save('system_curve.mat', ...
+save(outfile, ...
      'design', 'dates', ...            % design definition + calendar
      'dP_des', 'H_des', 'P_hyd', ...   % daily duty time series  [1 x 366]
      'Q_p', 'Q_f', 'Q_b', ...          % design flows, m3/d
@@ -209,4 +240,4 @@ save('system_curve.mat', ...
      'dP_env_max', 'dP_env_min', ...
      'feasible', 'pi_avg', 'pi_b', 'A_T', 'P_max', 'bar2m');
 
-fprintf('Saved system_curve.mat\n');
+if SHOW_FIGS, fprintf('Saved %s\n', outfile); end
