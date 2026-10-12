@@ -8,10 +8,14 @@ n_elem   = 7;                              % elements per vessel
 VESSELS  = [1 10 25 50 94 120 150];        % plant sizes to mark
 R_set    = 0.35;                           % system recovery, fraction
 P_max    = 83;                             % element pressure rating, bar
-eta_pump = 0.85;                           % hydraulic x motor x VFD
+% No pump efficiency here.  Everything this script reports is hydraulic:
+% exact, and free of any assumption about equipment that has not been
+% selected yet.  Electrical power and electrical SEC follow later from
+% eta(Q,H) of the chosen pump, evaluated per operating point through the
+% affinity laws, with the ERD credit subtracted.
 DEMAND   = [100 1000 10000];               % optional capacity targets, m3/d ([] for none)
 rho_sw   = 1025;  g = 9.81;
-
+%% ====================== 2.  LOAD  =====================================
 D  = load('design_data.mat');
 O  = load('osmotic_pressure_recovery.mat');
 Ad = load('A_temp_data.mat');
@@ -33,10 +37,11 @@ nC = size(D.config,1);
 nV = numel(VESSELS);
 col = lines(nC);
 
+%% ====================== 3.  BUILD THE MAP  ============================
 Qp   = zeros(nC,nV);   Qf    = zeros(nC,nV);
-Pel  = zeros(nC,nV);   Amem  = zeros(1,nV);
+Phyd = zeros(nC,nV);   Amem  = zeros(1,nV);
 dPhi = zeros(nC,1);    dPlo  = zeros(nC,1);
-SEC  = zeros(nC,1);    Jdes  = zeros(nC,1);
+SECh = zeros(nC,1);    Jdes  = zeros(nC,1);
 Rcl  = zeros(nC,1);    Hard  = strings(nC,1);
 
 for v = 1:nV
@@ -57,12 +62,14 @@ for c = 1:nC
     Rcl(c)  = 100*D.ceil_recovery(iE,c);
     Hard(c) = string(datestr(dates(iHard),'dd mmm'));
 
-    % hydraulic SEC = 0.0277778 * dP / R   -> no membrane area in it
-    SEC(c)  = 1e5*dPmax/(3.6e6*R_set)/eta_pump;            % kWh/m3, electrical
+    % SEC_hyd = 0.0277778 * dP / R  -> exact, no membrane area, no pump.
+    % This is the hydraulic work the membrane demands per m3 of permeate:
+    % a floor that no pump selection can go below.
+    SECh(c) = 1e5*dPmax/(3.6e6*R_set);                     % kWh/m3, hydraulic
 
-    Qp(c,:) = J_des * Amem * LMH_to_m3d;                   % m3/d
-    Qf(c,:) = Qp(c,:) / R_set;
-    Pel(c,:)= dPmax*1e5 .* (Qf(c,:)/86400) / 1000 / eta_pump;   % kW
+    Qp(c,:)   = J_des * Amem * LMH_to_m3d;                 % m3/d
+    Qf(c,:)   = Qp(c,:) / R_set;
+    Phyd(c,:) = dPmax*1e5 .* (Qf(c,:)/86400) / 1000;       % kW, hydraulic
 end
 
 %% ====================== 4.  FIGURE  ===================================
@@ -87,8 +94,8 @@ for c = 1:nC
          'HandleVisibility','off');
     hC(c) = plot(Qp(c,:), dPhi(c)*ones(1,nV), 'o', 'MarkerSize',8, ...
          'MarkerFaceColor',col(c,:), 'MarkerEdgeColor','k', 'LineStyle','none', ...
-         'DisplayName', sprintf('%s   J_d %.1f LMH,  \\DeltaP %.1f bar,  SEC %.2f kWh/m^3', ...
-                                D.config.Name(c), Jdes(c), dPhi(c), SEC(c)));
+         'DisplayName', sprintf('%s   J_d %.1f LMH,  \\DeltaP %.1f bar,  SEC_{hyd} %.2f kWh/m^3', ...
+                                D.config.Name(c), Jdes(c), dPhi(c), SECh(c)));
     plot(Qp(c,:), dPlo(c)*ones(1,nV), 'o', 'MarkerSize',6, ...
          'MarkerFaceColor','w', 'MarkerEdgeColor',col(c,:), 'LineWidth',1.1, ...
          'LineStyle','none', 'HandleVisibility','off');
@@ -106,8 +113,9 @@ ylim([floor(min(dPlo))-3  ceil(max(dPhi))+3]);
 xlabel('Permeate capacity  Q_p  (m^3/d)');
 ylabel('Required pressure  \DeltaP  (bar)');
 title(sprintf(['Design map - %d elements per vessel, R = %.0f %%\n' ...
-               'filled = worst day, open = best day;  rows are flat ' ...
-               'because \\DeltaP and SEC do not scale with plant size'], ...
+               'filled = worst day, open = best day;  rows are flat because ' ...
+               '\\DeltaP and SEC_{hyd} do not scale with plant size\n' ...
+               'all quantities hydraulic - electrical values follow pump selection and ERD'], ...
                n_elem, R_set*100));
 legend(hC,'Location','southoutside','Box','off','FontSize',8);
 
@@ -117,12 +125,14 @@ ylabel('Equivalent head  H  (m)');
 set(gca,'YColor',[0.35 0.35 0.35]);
 yyaxis left
 
+%% ====================== 5.  TABLE  ====================================
 nR = nC*nV;
 Configuration = strings(nR,1);  Vessels    = zeros(nR,1);
 Area_m2       = zeros(nR,1);    Jd_LMH     = zeros(nR,1);
 Qp_m3d        = zeros(nR,1);    Qf_m3h     = zeros(nR,1);
-dPmax_bar     = zeros(nR,1);    Pel_kW     = zeros(nR,1);
-SEC_kWhm3     = zeros(nR,1);    Rceil_pct  = zeros(nR,1);
+dPmin_bar     = zeros(nR,1);    dPmax_bar  = zeros(nR,1);
+Phyd_max_kW   = zeros(nR,1);    SEChyd_kWhm3 = zeros(nR,1);
+Rceil_pct     = zeros(nR,1);
 HardestDay    = strings(nR,1);  Feasible   = strings(nR,1);
 
 r = 0;
@@ -135,9 +145,10 @@ for c = 1:nC
         Jd_LMH(r)    = Jdes(c);
         Qp_m3d(r)    = Qp(c,v);
         Qf_m3h(r)    = Qf(c,v)/24;
+        dPmin_bar(r) = dPlo(c);
         dPmax_bar(r) = dPhi(c);
-        Pel_kW(r)    = Pel(c,v);
-        SEC_kWhm3(r) = Pel(c,v)*24/Qp(c,v);      % recomputed per row
+        Phyd_max_kW(r)  = Phyd(c,v);
+        SEChyd_kWhm3(r) = Phyd(c,v)*24/Qp(c,v);            % recomputed per row
         Rceil_pct(r) = Rcl(c);
         HardestDay(r)= Hard(c);
         ok = (dPhi(c) < P_max) && (R_set < Rcl(c)/100);
@@ -146,13 +157,20 @@ for c = 1:nC
 end
 
 T = table(Configuration, Vessels, Area_m2, Jd_LMH, Qp_m3d, Qf_m3h, ...
-          dPmax_bar, Pel_kW, SEC_kWhm3, Rceil_pct, HardestDay, Feasible);
+          dPmin_bar, dPmax_bar, Phyd_max_kW, SEChyd_kWhm3, ...
+          Rceil_pct, HardestDay, Feasible);
 
 fprintf('\n========================= DESIGN MAP =========================\n');
 disp(T);
-fprintf('SEC_kWhm3 is recomputed for every row: it varies with\n');
-fprintf('pretreatment (through J_d and hence dP) but NOT with plant size.\n');
+fprintf('Every column is hydraulic and exact - nothing here assumes a pump.\n');
+fprintf('SEChyd_kWhm3 follows from dP and R alone: it varies with\n');
+fprintf('pretreatment (through J_d) and NOT with plant size.\n');
+fprintf('Electrical power and electrical SEC are computed in the pump layer\n');
+fprintf('from eta(Q,H), then reduced by the ERD credit.  They must come out\n');
+fprintf('ABOVE these hydraulic values - that is the check.\n');
 fprintf('==============================================================\n\n');
 
 writetable(T,'design_map.csv');
-fprintf('Saved design_map.csv\n');
+save('design_map.mat','T','Qp','Qf','Phyd','SECh','dPhi','dPlo','Jdes', ...
+     'Amem','VESSELS','n_elem','R_set','Rcl','Hard');
+fprintf('Saved design_map.csv and design_map.mat\n');
