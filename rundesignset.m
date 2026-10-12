@@ -1,80 +1,145 @@
-%% runDesignSet.m
-%  Overlay several PV-SWRO design points on one system-curve figure and
-%  tabulate their duty.  Each row of DESIGNS is one call to systemCurve.
+%% compare_pretreatment.m
+%  Compare the four pretreatment configurations of the design guide on ONE
+%  system curve.
 %
-%  Column order:  n_elem | n_vess | R_set | J_design | cfg_name
-%  Leave J_design as [] to take the midpoint of that configuration's
-%  design flux band (14.5 / 15.5 / 17 / 19 LMH).
+%  The system curve dP(J,t) = pi_avg(R,t) + J/A(T(t)) contains no
+%  pretreatment term, so the four configurations do NOT have four different
+%  curves.  They share one curve and differ only in:
+%     - where they are allowed to sit on it   (design flux band)
+%     - how far along it they may go          (max element flux)
+%     - the staging ceiling on recovery       (max element recovery)
+%  The envelope is therefore drawn ONCE and the four configurations are
+%  marked on it.  Overlaying four identical curves hides three of them.
 
 clear; close all; clc;
 
-%% ---- CASE A: the four pretreatment configurations, same hardware ------
-% Same 7-element / 1-vessel train, same recovery.  The only thing that
-% changes is the allowed flux band and the maximum element flux, so this
-% figure isolates what pretreatment does and does not control.
+%% ---- fixed hardware and operating point ------------------------------
+n_elem = 7;        % elements per vessel
+n_vess = 1;        % vessels
+R_set  = 0.35;     % system recovery, fraction
+P_max  = 83;       % element pressure rating, bar
+rho_sw = 1025;  g = 9.81;
 
-DESIGNS = { ...
-     7,   1, 0.35, [], "Conventional pretreatment"   ; ...
-     7,   1, 0.35, [], "Generic membrane filtration" ; ...
-     7,   1, 0.35, [], "Well/open intake + UF"       ; ...
-     7,   1, 0.35, [], "UF + B-free"                 };
+%% ---- load ------------------------------------------------------------
+D  = load('design_data.mat');
+O  = load('osmotic_pressure_recovery.mat');
+Ad = load('A_temp_data.mat');
+S  = load('salinity_and_temp_mean.mat','T_daily_mean','S_daily_mean','dates');
+dates = S.dates;
 
-% ---- CASE B: one configuration across the vessel range ----------------
-% Uncomment to see the scale effect instead (identical curve in flux
-% space, three decades apart in pump duty).
-%
-% DESIGNS = { ...
-%      7,   1, 0.35, [], "Conventional pretreatment" ; ...
-%      7,  25, 0.35, [], "Conventional pretreatment" ; ...
-%      7, 100, 0.35, [], "Conventional pretreatment" ; ...
-%      7, 150, 0.35, [], "Conventional pretreatment" };
+iE = find(D.N_elements == n_elem, 1);
+iV = find(D.N_vessels  == n_vess, 1);
+iR = find(abs(O.recovery - R_set*100) < 1e-9, 1);
+assert(~isempty(iE) && ~isempty(iV) && ~isempty(iR), 'Design point not on the stored grids.');
 
-%% ---- run ------------------------------------------------------------
-nD  = size(DESIGNS,1);
-res = cell(nD,1);
+A_mem  = D.total_A(iE,iV);
+pi_avg = O.osmotic_pressure_C_avg(iR,:);
+pi_b   = O.osmotic_pressure_C_brine(iR,:);
+A_T    = interp1(Ad.A_block(1,:), Ad.A_block(2,:), S.T_daily_mean);
 
-for d = 1:nD
-    mode   = "add";  if d == 1, mode = "new"; end
-    res{d} = systemCurve(DESIGNS{d,1}, DESIGNS{d,2}, DESIGNS{d,3}, ...
-                         DESIGNS{d,4}, DESIGNS{d,5}, mode);
+LMH_to_m3d = 24/1000;
+bar2m      = 1e5/(rho_sw*g);
+
+%% ---- the single shared curve, swept to the largest J_max -------------
+J_top   = max(D.config.J_max);                  % 38 LMH
+J_sweep = (0 : 0.25 : J_top)';
+Hsys    = pi_avg + (J_sweep ./ A_T);
+dP_env_max = max(Hsys, [], 2);
+dP_env_min = min(Hsys, [], 2);
+
+%% ---- per-configuration design point ----------------------------------
+nC  = size(D.config,1);
+col = lines(nC);
+
+Configuration = strings(nC,1);  Band_LMH   = strings(nC,1);
+J_design_LMH  = zeros(nC,1);    J_max_LMH  = zeros(nC,1);
+Rceil_pct     = zeros(nC,1);    Qp_m3d     = zeros(nC,1);
+Qf_m3h        = zeros(nC,1);    dP_min_bar = zeros(nC,1);
+dP_max_bar    = zeros(nC,1);    Head_max_m = zeros(nC,1);
+Phyd_max_kW   = zeros(nC,1);    HardestDay = strings(nC,1);
+Feasible      = strings(nC,1);
+
+figure('Name','Pretreatment comparison','Color','w','Position',[80 300 760 560]);
+hold on; grid on; box on;
+
+plot(J_sweep, Hsys, '-', 'Color',[0.82 0.86 0.91], 'LineWidth',0.3, ...
+     'HandleVisibility','off');
+hMax = plot(J_sweep, dP_env_max, '-', 'Color',[0.75 0.10 0.10], 'LineWidth',2.2);
+hMin = plot(J_sweep, dP_env_min, '-', 'Color',[0.10 0.35 0.75], 'LineWidth',2.2);
+yline(P_max,'k--','LineWidth',1.1,'Label','element rating 83 bar', ...
+      'LabelHorizontalAlignment','left','HandleVisibility','off');
+
+y_lo = max(0, floor(min(dP_env_min)/5)*5 - 5);
+y_hi = ceil(P_max/5)*5;
+hCfg = gobjects(nC,1);
+
+for c = 1:nC
+    name   = D.config.Name(c);
+    band   = D.config.J_design{c};
+    J_lo   = min(band);   J_hi = max(band);
+    J_elem = D.config.J_max(c);
+    R_ceil = D.ceil_recovery(iE,c);
+    J_des  = round(((J_lo + J_hi)/2)/0.5)*0.5;        % band midpoint
+
+    % ---- duty at this configuration's design flux --------------------
+    dP_des = pi_avg + J_des ./ A_T;
+    [dPmax, iHard] = max(dP_des);
+    dPmin          = min(dP_des);
+    Q_p = J_des * A_mem * LMH_to_m3d;
+    Q_f = Q_p / R_set;
+    Phd = max(dP_des * 1e5 .* (Q_f/86400) / 1000);
+
+    % ---- band, extent and design point on the shared curve -----------
+    patch([J_lo J_hi J_hi J_lo], [y_lo y_lo y_hi y_hi], col(c,:), ...
+          'FaceAlpha',0.08, 'EdgeColor',col(c,:), 'LineStyle',':', ...
+          'HandleVisibility','off');
+    xline(J_elem, '-', 'Color',col(c,:), 'LineWidth',1.4, 'Alpha',0.6, ...
+          'Label',sprintf('J_{max} %.0f', J_elem), 'LabelOrientation','horizontal', ...
+          'LabelVerticalAlignment','bottom', 'FontSize',8, 'HandleVisibility','off');
+    hCfg(c) = plot(J_des, dPmax, 'o', 'MarkerSize',9, ...
+                   'MarkerFaceColor',col(c,:), 'MarkerEdgeColor','k', ...
+                   'DisplayName',sprintf('%s  (%.0f-%.0f, J=%.1f)', name, J_lo, J_hi, J_des));
+    plot(J_des, dPmin, 'o', 'MarkerSize',9, 'MarkerFaceColor','w', ...
+         'MarkerEdgeColor',col(c,:), 'LineWidth',1.4, 'HandleVisibility','off');
+    plot([J_des J_des], [dPmin dPmax], '-', 'Color',col(c,:), 'LineWidth',1.6, ...
+         'HandleVisibility','off');
+
+    % ---- table row ----------------------------------------------------
+    Configuration(c) = name;
+    Band_LMH(c)      = sprintf('%.0f-%.0f', J_lo, J_hi);
+    J_design_LMH(c)  = J_des;
+    J_max_LMH(c)     = J_elem;
+    Rceil_pct(c)     = 100*R_ceil;
+    Qp_m3d(c)        = Q_p;
+    Qf_m3h(c)        = Q_f/24;
+    dP_min_bar(c)    = dPmin;
+    dP_max_bar(c)    = dPmax;
+    Head_max_m(c)    = dPmax*bar2m;
+    Phyd_max_kW(c)   = Phd;
+    HardestDay(c)    = string(datestr(dates(iHard),'dd mmm'));
+    ok = (dPmax < P_max) && (R_set < R_ceil);
+    if ok, Feasible(c) = "yes"; else, Feasible(c) = "NO"; end
 end
 
-%% ---- comparison table ------------------------------------------------
-Configuration = strings(nD,1);
-Elements      = zeros(nD,1);   Vessels      = zeros(nD,1);
-Area_m2       = zeros(nD,1);   Band_LMH     = strings(nD,1);
-J_design_LMH  = zeros(nD,1);   Rceil_pct    = zeros(nD,1);
-Qp_m3d        = zeros(nD,1);   Qf_m3h       = zeros(nD,1);
-dP_min_bar    = zeros(nD,1);   dP_max_bar   = zeros(nD,1);
-Phyd_max_kW   = zeros(nD,1);   Feasible     = strings(nD,1);
+xlim([0 J_top]);  ylim([y_lo y_hi]);
+xlabel('Permeate flux  J_w  (LMH)');
+ylabel('Required pressure  \DeltaP  (bar)');
+title(sprintf(['One system curve, four pretreatment configurations\n' ...
+               '%de x %dv, A_{mem} = %.0f m^2, R = %.0f %%'], ...
+               n_elem, n_vess, A_mem, R_set*100));
+legend([hMax; hMin; hCfg], 'Location','northwest','Box','off','FontSize',8);
 
-for d = 1:nD
-    o = res{d};
-    Configuration(d) = o.cfg_name;
-    Elements(d)      = o.n_elem;
-    Vessels(d)       = o.n_vess;
-    Area_m2(d)       = o.A_mem;
-    Band_LMH(d)      = sprintf('%.0f-%.0f', o.J_lo, o.J_hi);
-    J_design_LMH(d)  = o.J_design;
-    Rceil_pct(d)     = 100*o.R_ceil;
-    Qp_m3d(d)        = o.Q_p;
-    Qf_m3h(d)        = o.Q_f/24;
-    dP_min_bar(d)    = o.dP_des_min;
-    dP_max_bar(d)    = o.dP_des_max;
-    Phyd_max_kW(d)   = o.P_hyd_max;
+%% ---- table -----------------------------------------------------------
+T = table(Configuration, Band_LMH, J_design_LMH, J_max_LMH, Rceil_pct, ...
+          Qp_m3d, Qf_m3h, dP_min_bar, dP_max_bar, Head_max_m, ...
+          Phyd_max_kW, HardestDay, Feasible);
 
-    ok = o.inBand && (o.dP_des_max < o.P_max) && (o.R_set < o.R_ceil);
-    if ok, Feasible(d) = "yes"; else, Feasible(d) = "NO"; end
-end
-
-T = table(Configuration, Elements, Vessels, Area_m2, Band_LMH, ...
-          J_design_LMH, Rceil_pct, Qp_m3d, Qf_m3h, ...
-          dP_min_bar, dP_max_bar, Phyd_max_kW, Feasible);
-
-fprintf('\n======================= DESIGN SET =======================\n');
+fprintf('\n================ PRETREATMENT COMPARISON ================\n');
+fprintf('%de x %dv, A_mem = %.0f m2, R = %.0f %%\n\n', n_elem, n_vess, A_mem, R_set*100);
 disp(T);
-fprintf('Hardest day %s  |  easiest day %s  (by required pressure)\n', ...
-        datestr(res{1}.date_hard,'dd mmm'), datestr(res{1}.date_easy,'dd mmm'));
+fprintf('All four share one system curve; only the band, the J_max\n');
+fprintf('cut-off and the staging ceiling differ.\n');
 fprintf('=========================================================\n\n');
 
-save('design_set_results.mat','T','res','DESIGNS');
+writetable(T,'pretreatment_comparison.csv');
+fprintf('Saved pretreatment_comparison.csv\n');
