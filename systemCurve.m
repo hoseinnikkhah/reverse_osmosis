@@ -7,16 +7,19 @@ function out = systemCurve(n_elem, n_vess, R_set, J_design, cfg_name, plotMode)
 %       dP(J,t) = pi_avg(R,t) + J / A(T(t))                        [bar]
 %       Q_f(J)  = J * A_mem * (24/1000) / R                        [m3/d]
 %
-%   Note that dP depends only on recovery, seawater salinity and seawater
-%   temperature.  It carries no pretreatment term and no membrane-area term.
-%   The pretreatment configuration fixes WHERE on that curve the plant is
-%   allowed to sit (the design flux band) and HOW FAR the curve extends
-%   (the maximum element flux).  The vessel/element count fixes only the
-%   Q_f axis, through A_mem.
+%   dP depends only on recovery, seawater salinity and seawater temperature.
+%   It carries no pretreatment term and no membrane-area term.  The
+%   pretreatment configuration fixes WHERE on that curve the plant may sit
+%   (the design flux band) and HOW FAR the curve extends (the maximum
+%   element flux).  The vessel/element count fixes only the Q_f axis,
+%   through A_mem.
 %
 % SYNTAX
 %   out = systemCurve(n_elem, n_vess)
 %   out = systemCurve(n_elem, n_vess, R_set, J_design, cfg_name, plotMode)
+%
+%   Pass [] for any middle argument to take its default, e.g.
+%   systemCurve(7, 1, [], [], [], "new").
 %
 % INPUTS
 %   n_elem    elements per pressure vessel                 5, 6 or 7
@@ -52,7 +55,8 @@ if nargin < 6 || isempty(plotMode), plotMode = "off";                      end
 cfg_name = string(cfg_name);
 plotMode = lower(string(plotMode));
 if ~ismember(plotMode, ["off" "new" "add"])
-    error('systemCurve: plotMode must be "off", "new" or "add".');
+    error(['systemCurve: plotMode must be "off", "new" or "add". ' ...
+           '(The old true/false form is no longer accepted.)']);
 end
 
 % ------------------------------------------------------------------------
@@ -124,8 +128,8 @@ end
 % 4.  state variables
 % ------------------------------------------------------------------------
 A_mem  = D.total_A(iE,iV);                       % installed membrane area, m2
-pi_avg = O.osmotic_pressure_C_avg(iR,:);         % pi at log-mean-ish C_avg, bar  [1 x 366]
-pi_b   = O.osmotic_pressure_C_brine(iR,:);       % pi at brine C_b,          bar  [1 x 366]
+pi_avg = O.osmotic_pressure_C_avg(iR,:);         % pi at average concentration, bar [1 x 366]
+pi_b   = O.osmotic_pressure_C_brine(iR,:);       % pi at brine concentration,   bar [1 x 366]
 A_T    = interp1(Ad.A_block(1,:), Ad.A_block(2,:), S.T_daily_mean);  % LMH/bar  [1 x 366]
 
 LMH_to_m3d = 24/1000;
@@ -151,16 +155,6 @@ driving_ok  = Hsys >  pi_b;                      % net driving force positive
 pressure_ok = Hsys <  P_max;                     % within the pressure rating
 feasible    = driving_ok & pressure_ok;
 
-% minimum flux that still produces permeate, exact closed form:
-%   J_min = A(T) * [pi(C_b) - pi(C_avg)] = A(T) * pi(C_f) * R / (2(1-R))
-% -> pretreatment-independent; set only by recovery, salinity, temperature
-J_min_day = A_T .* (pi_b - pi_avg);              % LMH  [1 x 366]
-[J_min_yr, iHard] = max(J_min_day);              % worst (highest-floor) day
-[~, iEasy]        = min(J_min_day);
-Qf_min_yr = flux2Qf(J_min_yr);                   % m3/d
-
-turndown = 1 - J_min_yr / J_design;              % usable flux turndown at the design point
-
 % ------------------------------------------------------------------------
 % 7.  design point and pump duty
 % ------------------------------------------------------------------------
@@ -168,9 +162,9 @@ Q_p = J_design * A_mem * LMH_to_m3d;             % permeate, m3/d
 Q_f = Q_p / R_set;                               % feed,     m3/d
 Q_b = Q_f - Q_p;                                 % brine,    m3/d
 
-dP_des      = pi_avg + J_design ./ A_T;          % required pressure at J_design, bar [1 x 366]
-dP_des_max  = max(dP_des);
-dP_des_min  = min(dP_des);
+dP_des = pi_avg + J_design ./ A_T;               % required pressure at J_design, bar [1 x 366]
+[dP_des_max, iHard] = max(dP_des);               % hardest day: highest required pressure
+[dP_des_min, iEasy] = min(dP_des);               % easiest day
 dP_des_mean = mean(dP_des);
 
 % hydraulic power of the HP pump at the design point, kW
@@ -193,8 +187,6 @@ out = struct( ...
     'Hsys',        Hsys,          'dP_env_max',  dP_env_max, ...
     'dP_env_min',  dP_env_min,    'feasible',    feasible, ...
     'driving_ok',  driving_ok,    'pressure_ok', pressure_ok, ...
-    'J_min_day',   J_min_day,     'J_min_yr',    J_min_yr, ...
-    'Qf_min_yr',   Qf_min_yr,     'turndown',    turndown, ...
     'Q_p',         Q_p,           'Q_f',         Q_f, ...
     'Q_b',         Q_b,           'dP_des',      dP_des, ...
     'dP_des_max',  dP_des_max,    'dP_des_min',  dP_des_min, ...
@@ -219,24 +211,22 @@ end % ===================== main function ends ==========================
 % ========================================================================
 function plotSystemCurve(out, plotMode)
 %PLOTSYSTEMCURVE  Draw one design onto the shared, re-entrant figure.
-%   Left  panel: flux space  -> the curve itself, plus this design's band.
+%   Left  panel: flux space      -> the curve itself, plus this design's band.
 %   Right panel: feed-flow space -> where this design sits in absolute flow.
 
 TAG = 'PVSWRO_systemCurve';
 f = findobj('Type','figure','Tag',TAG);
 
 if plotMode == "new" || isempty(f)
-    if ~isempty(f), clf(f(1)); fig = f(1); else, fig = figure; end
+    if ~isempty(f), fig = f(1); clf(fig); else, fig = figure; end
     set(fig,'Tag',TAG,'Name','PV-SWRO system curve','Color','w', ...
             'Position',[80 80 1180 520]);
     axL = subplot(1,2,1,'Parent',fig);  hold(axL,'on');  grid(axL,'on');  box(axL,'on');
     axR = subplot(1,2,2,'Parent',fig);  hold(axR,'on');  grid(axR,'on');  box(axR,'on');
-    setappdata(fig,'axL',axL);  setappdata(fig,'axR',axR);
-    setappdata(fig,'nSeries',0);
-    setappdata(fig,'cfgDrawn',strings(0,1));
-    setappdata(fig,'QfMax',0);
-    setappdata(fig,'QfMin',Inf);
-    setappdata(fig,'JMax',0);
+    setappdata(fig,'axL',axL);       setappdata(fig,'axR',axR);
+    setappdata(fig,'nSeries',0);     setappdata(fig,'cfgDrawn',strings(0,1));
+    setappdata(fig,'QfMax',0);       setappdata(fig,'QfMin',Inf);
+    setappdata(fig,'JMax',0);        setappdata(fig,'YLo',Inf);
 else
     fig = f(1);
     figure(fig);
@@ -261,9 +251,9 @@ end
 % ---- once per configuration: shade its design flux band ----------------
 drawn = getappdata(fig,'cfgDrawn');
 if ~any(drawn == out.cfg_name)
-    yl = [0 out.P_max];
-    patch(axL, [out.J_lo out.J_hi out.J_hi out.J_lo], [yl(1) yl(1) yl(2) yl(2)], ...
-          col, 'FaceAlpha',0.10, 'EdgeColor',col, 'LineStyle',':', ...
+    patch(axL, [out.J_lo out.J_hi out.J_hi out.J_lo], ...
+               [0 0 out.P_max out.P_max], col, ...
+          'FaceAlpha',0.10, 'EdgeColor',col, 'LineStyle',':', ...
           'HandleVisibility','off');
     text(axL, (out.J_lo+out.J_hi)/2, out.P_max-2, ...
          sprintf('%.0f-%.0f', out.J_lo, out.J_hi), ...
@@ -278,8 +268,6 @@ plot(axL, out.J_sweep, out.dP_env_min, '--', 'Color',col, 'LineWidth',1.2, ...
      'HandleVisibility','off');
 plot(axL, out.J_design, out.dP_des_max, 'o', 'MarkerSize',7, ...
      'MarkerFaceColor',col, 'MarkerEdgeColor','k', 'HandleVisibility','off');
-xline(axL, out.J_min_yr, ':', 'Color',col, 'LineWidth',1.3, ...
-      'HandleVisibility','off');
 
 % ---- right panel: annual envelope in feed-flow space -------------------
 Qh = out.Qf_sweep/24;                                  % m3/h
@@ -291,13 +279,12 @@ plot(axR, out.Q_f/24, out.dP_des_max, 'o', 'MarkerSize',7, ...
      'MarkerFaceColor',col, 'MarkerEdgeColor','k', 'HandleVisibility','off');
 
 % ---- axes bookkeeping --------------------------------------------------
-setappdata(fig,'QfMax', max(getappdata(fig,'QfMax'), max(Qh)));
-setappdata(fig,'QfMin', min(getappdata(fig,'QfMin'), max(Qh)));
-setappdata(fig,'JMax',  max(getappdata(fig,'JMax'),  out.J_elem));
+setappdata(fig,'QfMax',   max(getappdata(fig,'QfMax'), max(Qh)));
+setappdata(fig,'QfMin',   min(getappdata(fig,'QfMin'), max(Qh)));
+setappdata(fig,'JMax',    max(getappdata(fig,'JMax'),  out.J_elem));
+setappdata(fig,'YLo',     min(getappdata(fig,'YLo'),   min(out.dP_env_min)));
 setappdata(fig,'nSeries', n+1);
 
-if n == 0, setappdata(fig,'YLo',Inf); end
-setappdata(fig,'YLo', min(getappdata(fig,'YLo'), min(out.dP_env_min)));
 y_lo = max(0, floor(getappdata(fig,'YLo')/5)*5 - 5);
 y_hi = ceil(out.P_max/5)*5;
 
