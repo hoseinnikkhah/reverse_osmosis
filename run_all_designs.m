@@ -37,7 +37,7 @@ J_FIX  = [];          % [] = band midpoint per configuration (recommended)
 
 %% ====================== 2.  RUN  ======================================
 BATCH_MODE = true;             %#ok<NASGU>  read by systemCurve.m
-SHOW_FIGS  = false;            %#ok<NASGU>
+SHOW_FIGS  = true;            %#ok<NASGU>
 
 nD = size(DESIGNS,1);
 
