@@ -5,7 +5,7 @@ fprintf('>>> running design_map.m  (pretreatment x plant size, one figure)\n');
 %% ====================== 1.  WHAT TO MAP  ==============================
 % ---- edit this block only ---------------------------------------------
 n_elem   = 7;                              % elements per vessel
-VESSELS  = [1 10 25 50 94 120 150];        % plant sizes to mark
+VESSELS  = [94 120 150];        % plant sizes to mark
 R_set    = 0.35;                           % system recovery, fraction
 P_max    = 83;                             % element pressure rating, bar
 % No pump efficiency here.  Everything this script reports is hydraulic:
