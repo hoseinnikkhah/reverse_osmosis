@@ -1,40 +1,48 @@
 %% train_staging.m
-%  Split a plant into parallel trains and work out what it can actually
-%  follow.
+%  Train staging and per-train pump duty for the WHOLE design selection:
+%  every pretreatment configuration x every plant size, in one run.
 %
-%  A pressure vessel array is built as k identical TRAINS, each with its
-%  own high-pressure pump.  Two mechanisms set the operating range:
+%  A pressure vessel array is built as k identical TRAINS, each with its own
+%  high-pressure pump.  Two mechanisms set the operating range:
 %
-%    within a train : the VFD modulates flux across the design band, a
-%                     ratio of only J_hi/J_lo (1.24 to 1.42 depending on
-%                     pretreatment)
-%    between trains : trains are switched on and off, so with j of k
-%                     trains online the reachable feed flow is j * [Q_lo,
-%                     Q_hi]
+%    within a train : the VFD modulates flux across the design band, a ratio
+%                     of only J_hi/J_lo (1.24 to 1.42 by pretreatment)
+%    between trains : trains switch on and off, so with j of k trains online
+%                     the reachable feed flow is j * [Q_lo, Q_hi]
 %
 %  Stepping from j to j+1 trains leaves no gap only when
-%      j*J_hi >= (j+1)*J_lo    ->    j >= J_lo/(J_hi - J_lo)
-%  Below that threshold the reachable set has holes: flows the plant cannot
-%  hold steadily.  Under PV those holes are where available solar power has
-%  to be curtailed, so this is the hydraulic origin of the curtailment term
-%  - not an assumption.
+%      j*J_hi >= (j+1)*J_lo    ->    j >= J_lo/(J_hi - J_lo) = j*
+%  The gaps BELOW j* stay in the reachable set however many trains are
+%  built; they only shrink in absolute size.  They sit at LOW flow, i.e.
+%  low power - exactly where PV output is partial - so this is the
+%  hydraulic origin of curtailment, not an assumption.
+%
+%  WHAT DEPENDS ON WHAT
+%    j*, Coverage_pct, Plant_turndown : configuration only.  They are
+%        ratios, so plant size cannot change them.  Rows sharing a
+%        configuration MUST repeat down the table - that is the check.
+%    per-train duty (Qf, area, power), MaxGap_m3h : configuration AND size.
 %
 %  Inputs : design_data.mat, osmotic_pressure_recovery.mat,
 %           A_temp_data.mat, salinity_and_temp_mean.mat
-%  Output : train_staging.csv  (+ two figures)
+%  Output : train_staging.csv, train_staging.mat  (+ two figures)
 
 clear; close all; clc;
-fprintf('>>> running train_staging.m\n');
+fprintf('>>> running train_staging.m  (all configurations x all plant sizes)\n');
 
-%% ====================== 1.  THE PLANT  ================================
+%% ====================== 1.  THE SELECTION  ============================
 % ---- edit this block only ---------------------------------------------
-cfg_name = "Conventional pretreatment";
-n_elem   = 7;           % elements per vessel
-n_vess   = 94;          % TOTAL vessels in the plant
-R_set    = 0.35;        % system recovery, fraction
-K_SHOW   = 4;           % train count to draw the staircase for
-K_MAX    = 12;          % sweep 1..K_MAX trains for the coverage study
-A_elem   = 41;          % m2 per element (SW30HRLE-440)
+CFGS = ["Conventional pretreatment"
+        "Generic membrane filtration"
+        "Well/open intake + UF"
+        "UF + B-free"];
+
+VESS     = [94 120 150];    % total vessels per plant
+n_elem   = 7;               % elements per vessel
+R_set    = 0.35;            % system recovery, fraction
+K_MAX    = 12;              % sweep 1..K_MAX trains
+A_elem   = 41;              % m2 per element (SW30HRLE-440)
+REF_VESS = 120;             % plant size drawn in the staircase figure
 % -----------------------------------------------------------------------
 
 %% ====================== 2.  LOAD  =====================================
@@ -43,131 +51,226 @@ O  = load('osmotic_pressure_recovery.mat');
 Ad = load('A_temp_data.mat');
 S  = load('salinity_and_temp_mean.mat','T_daily_mean','dates');
 
-k   = find(D.config.Name == cfg_name, 1);
-iR  = find(abs(O.recovery - R_set*100) < 1e-9, 1);
-assert(~isempty(k) && ~isempty(iR), 'Configuration or recovery not on the stored grids.');
-
-band   = D.config.J_design{k};
-J_lo   = min(band);   J_hi = max(band);
-J_des  = round(((J_lo + J_hi)/2)/0.5)*0.5;
+iR = find(abs(O.recovery - R_set*100) < 1e-9, 1);
+assert(~isempty(iR), 'R_set = %.3f is not on the stored recovery grid.', R_set);
 pi_avg = O.osmotic_pressure_C_avg(iR,:);
 A_T    = interp1(Ad.A_block(1,:), Ad.A_block(2,:), S.T_daily_mean);
 
-dP_des = pi_avg + J_des ./ A_T;
-dP_max = max(dP_des);   dP_min = min(dP_des);
-
 LMH_to_m3d = 24/1000;
+nC = numel(CFGS);   nV = numel(VESS);
 
-%% ============ 3.  THE CONTINUITY THRESHOLD (analytic) =================
-j_star    = ceil(J_lo/(J_hi - J_lo));     % trains needed for no gaps
-band_ratio = J_hi/J_lo;                   % single-train turndown ratio
+%% =========== 3.  PER-CONFIGURATION CONSTANTS (size independent) =======
+J_lo = zeros(nC,1);  J_hi = zeros(nC,1);  J_des = zeros(nC,1);
+dPhi = zeros(nC,1);  dPlo = zeros(nC,1);  jstar = zeros(nC,1);
+bandR= zeros(nC,1);
 
-fprintf('\n--- %s ---\n', cfg_name);
-fprintf('design band      : %.1f - %.1f LMH   (ratio %.3f : 1)\n', J_lo, J_hi, band_ratio);
-fprintf('design flux      : %.1f LMH\n', J_des);
-fprintf('continuity needs : j* = ceil(%.0f/%.0f) = %d trains online\n', ...
-        J_lo, J_hi-J_lo, j_star);
-fprintf('                   below %d trains the reachable flow set has gaps\n\n', j_star);
+for c = 1:nC
+    k = find(D.config.Name == CFGS(c), 1);
+    assert(~isempty(k), 'Unknown configuration "%s".', CFGS(c));
 
-%% ====================== 4.  SWEEP TRAIN COUNT  ========================
-Trains     = (1:K_MAX)';
-VessPerTr  = zeros(K_MAX,1);   A_train   = zeros(K_MAX,1);
-Qf_tr_des  = zeros(K_MAX,1);   Qf_tr_lo  = zeros(K_MAX,1);
-Qf_tr_hi   = zeros(K_MAX,1);   Phyd_tr   = zeros(K_MAX,1);
-Coverage   = zeros(K_MAX,1);   TurndownOv= zeros(K_MAX,1);
-Exact      = strings(K_MAX,1);
+    band     = D.config.J_design{k};
+    J_lo(c)  = min(band);
+    J_hi(c)  = max(band);
+    J_des(c) = round(((J_lo(c) + J_hi(c))/2)/0.5)*0.5;      % band midpoint
 
-for kk = 1:K_MAX
-    vpt = n_vess/kk;
-    VessPerTr(kk) = vpt;
-    Exact(kk)     = string(abs(vpt - round(vpt)) < 1e-9);   % divides evenly?
+    dP       = pi_avg + J_des(c) ./ A_T;                    % bar [1 x 366]
+    dPhi(c)  = max(dP);
+    dPlo(c)  = min(dP);
 
-    A_train(kk)   = A_elem * n_elem * vpt;                  % m2 per train
-    Qf_tr_des(kk) = J_des * A_train(kk) * LMH_to_m3d / R_set / 24;   % m3/h
-    Qf_tr_lo(kk)  = J_lo  * A_train(kk) * LMH_to_m3d / R_set / 24;
-    Qf_tr_hi(kk)  = J_hi  * A_train(kk) * LMH_to_m3d / R_set / 24;
-    Phyd_tr(kk)   = dP_max*1e5 * (Qf_tr_des(kk)/3600) / 1000;        % kW per train
-
-    % reachable total flow set = union over j = 1..kk of j*[Qlo, Qhi]
-    hi   = kk*Qf_tr_hi(kk);
-    grid = linspace(Qf_tr_lo(kk), hi, 20000);
-    reach = false(size(grid));
-    for j = 1:kk
-        reach = reach | (grid >= j*Qf_tr_lo(kk) & grid <= j*Qf_tr_hi(kk));
-    end
-    Coverage(kk)   = 100*sum(reach)/numel(reach);
-    TurndownOv(kk) = hi / Qf_tr_lo(kk);        % full-plant turndown ratio
+    jstar(c) = ceil(J_lo(c)/(J_hi(c) - J_lo(c)));
+    bandR(c) = J_hi(c)/J_lo(c);
 end
 
-T = table(Trains, VessPerTr, Exact, A_train, Qf_tr_lo, Qf_tr_des, Qf_tr_hi, ...
-          Phyd_tr, Coverage, TurndownOv);
-T.Properties.VariableNames = {'Trains','VesselsPerTrain','DividesEvenly', ...
-    'Area_per_train_m2','Qf_train_min_m3h','Qf_train_des_m3h','Qf_train_max_m3h', ...
-    'Phyd_per_train_kW','Coverage_pct','Plant_turndown'};
-
-fprintf('================== TRAIN STAGING: %d vessels ==================\n', n_vess);
-disp(T);
-fprintf('Coverage_pct = share of the plant flow range the staging can hold\n');
-fprintf('steadily.  It reaches 100 %% once k >= j* = %d.\n', j_star);
-fprintf('Plant_turndown = k*Qf_max / Qf_min: one train gives %.2f:1,\n', band_ratio);
-fprintf('k trains give k times that.\n');
+fprintf('\n============ STAGING CONSTANTS (size independent) ============\n');
+fprintf('%-30s %-11s %7s %6s %8s\n','configuration','band LMH','ratio','j*','dP max');
+for c = 1:nC
+    fprintf('%-30s %4.0f - %-4.0f %7.3f %6d %7.2f bar\n', ...
+            CFGS(c), J_lo(c), J_hi(c), bandR(c), jstar(c), dPhi(c));
+end
+fprintf('j* = ceil(J_lo/(J_hi-J_lo)): trains needed before a step up\n');
+fprintf('leaves no gap.  Gaps below j* never close, they only shrink.\n');
 fprintf('==============================================================\n\n');
 
-writetable(T,'train_staging.csv');
+%% ============ 4.  SWEEP: configuration x size x train count ===========
+Qlo = zeros(nC,nV,K_MAX);  Qde = zeros(nC,nV,K_MAX);
+Qhi = zeros(nC,nV,K_MAX);  Atr = zeros(nC,nV,K_MAX);
+Phy = zeros(nC,nV,K_MAX);  Cov = zeros(nC,nV,K_MAX);
+Gap = zeros(nC,nV,K_MAX);  Tdn = zeros(nC,nV,K_MAX);
 
-%% ============== 5.  FIGURE 1 - THE STAIRCASE  =========================
-kk  = K_SHOW;
-Qlo = Qf_tr_lo(kk);  Qhi = Qf_tr_hi(kk);  Qde = Qf_tr_des(kk);
+for c = 1:nC
+    for v = 1:nV
+        for kk = 1:K_MAX
+            vpt = VESS(v)/kk;
+            A   = A_elem * n_elem * vpt;                    % m2 per train
 
-figure('Name','train_staging 1/2 - reachable flow','Color','w', ...
-       'Position',[80 380 720 520]);
-hold on; grid on; box on;
+            Atr(c,v,kk) = A;
+            Qlo(c,v,kk) = J_lo(c)  * A * LMH_to_m3d / R_set / 24;   % m3/h
+            Qde(c,v,kk) = J_des(c) * A * LMH_to_m3d / R_set / 24;
+            Qhi(c,v,kk) = J_hi(c)  * A * LMH_to_m3d / R_set / 24;
+            Phy(c,v,kk) = dPhi(c)*1e5 * (Qde(c,v,kk)/3600) / 1000;  % kW, hydraulic
 
-cj = lines(kk);
-for j = 1:kk
-    % the band this many trains can hold, drawn as a horizontal bar
-    patch([j*Qlo j*Qhi j*Qhi j*Qlo], [j-0.32 j-0.32 j+0.32 j+0.32], cj(j,:), ...
-          'FaceAlpha',0.35, 'EdgeColor',cj(j,:), 'LineWidth',1.2, ...
-          'HandleVisibility','off');
-    plot(j*Qde, j, 'o', 'MarkerSize',7, 'MarkerFaceColor','k', ...
-         'MarkerEdgeColor','k', 'HandleVisibility','off');
-end
+            % reachable total flow = union over j = 1..kk of j*[Qlo,Qhi]
+            lo = Qlo(c,v,kk);  hi = Qhi(c,v,kk);
+            grid  = linspace(lo, kk*hi, 20000);
+            reach = false(size(grid));
+            for j = 1:kk
+                reach = reach | (grid >= j*lo & grid <= j*hi);
+            end
+            Cov(c,v,kk) = 100*sum(reach)/numel(reach);
+            Tdn(c,v,kk) = kk*hi/lo;
 
-% mark the gaps between consecutive stages
-for j = 1:kk-1
-    if j*Qhi < (j+1)*Qlo
-        patch([j*Qhi (j+1)*Qlo (j+1)*Qlo j*Qhi], [0.4 0.4 kk+0.6 kk+0.6], ...
-              [0.85 0.25 0.25], 'FaceAlpha',0.12, 'EdgeColor','none', ...
-              'HandleVisibility','off');
-        text((j*Qhi + (j+1)*Qlo)/2, kk+0.35, 'gap', 'Color',[0.65 0.15 0.15], ...
-             'FontSize',8, 'HorizontalAlignment','center');
+            g = 0;                                           % widest gap
+            for j = 1:kk-1
+                g = max(g, (j+1)*lo - j*hi);
+            end
+            Gap(c,v,kk) = max(g, 0);
+        end
     end
 end
 
-xlabel('Plant feed flow  Q_f  (m^3/h)');
-ylabel('Trains online');
-yticks(1:kk);  ylim([0.4 kk+0.6]);
-xlim([0 kk*Qhi*1.05]);
-title(sprintf(['Reachable operating flow - %s\n%d vessels in %d trains ' ...
-               '(%.0f vessels each), band %.0f-%.0f LMH, j* = %d'], ...
-               cfg_name, n_vess, kk, VessPerTr(kk), J_lo, J_hi, j_star));
+%% ============ 5.  RECOMMENDED TRAIN COUNT PER DESIGN ==================
+% smallest k >= j* that divides the vessel count exactly; if none exists
+% within K_MAX, fall back to j* itself and flag the inexact split.
+k_rec = zeros(nC,nV);  exact_rec = strings(nC,nV);
+for c = 1:nC
+    for v = 1:nV
+        cand = jstar(c):K_MAX;
+        ok   = cand(mod(VESS(v), cand) == 0);
+        if isempty(ok)
+            k_rec(c,v) = jstar(c);   exact_rec(c,v) = "NO";
+        else
+            k_rec(c,v) = ok(1);      exact_rec(c,v) = "yes";
+        end
+    end
+end
 
-%% ============== 6.  FIGURE 2 - COVERAGE vs TRAIN COUNT ================
-figure('Name','train_staging 2/2 - coverage','Color','w', ...
-       'Position',[830 380 640 520]);
-yyaxis left
-plot(Trains, Coverage, 'o-', 'LineWidth',1.8, 'MarkerFaceColor','auto');
-ylabel('Reachable share of the flow range  (%)');
-ylim([0 105]);
-yyaxis right
-plot(Trains, TurndownOv, 's--', 'LineWidth',1.4);
-ylabel('Plant turndown ratio  (max/min)');
-grid on; box on;
-xline(j_star, 'k:', 'LineWidth',1.4, 'Label',sprintf('j* = %d', j_star), ...
-      'LabelOrientation','horizontal');
+%% ====================== 6.  TABLES  ===================================
+% --- full sweep, one row per (configuration, size, train count) ---------
+nR = nC*nV*K_MAX;
+Configuration=strings(nR,1); Vessels=zeros(nR,1); Trains=zeros(nR,1);
+VessPerTrain=zeros(nR,1);    DividesEvenly=strings(nR,1);
+Area_train_m2=zeros(nR,1);   Qf_min=zeros(nR,1); Qf_des=zeros(nR,1);
+Qf_max=zeros(nR,1);          Phyd_kW=zeros(nR,1);
+Coverage_pct=zeros(nR,1);    MaxGap_m3h=zeros(nR,1);
+Plant_turndown=zeros(nR,1);  Jstar=zeros(nR,1);
+
+r = 0;
+for c = 1:nC
+    for v = 1:nV
+        for kk = 1:K_MAX
+            r = r + 1;
+            vpt = VESS(v)/kk;
+            Configuration(r) = CFGS(c);
+            Vessels(r)       = VESS(v);
+            Trains(r)        = kk;
+            VessPerTrain(r)  = vpt;
+            DividesEvenly(r) = string(abs(vpt-round(vpt)) < 1e-9);
+            Area_train_m2(r) = Atr(c,v,kk);
+            Qf_min(r)        = Qlo(c,v,kk);
+            Qf_des(r)        = Qde(c,v,kk);
+            Qf_max(r)        = Qhi(c,v,kk);
+            Phyd_kW(r)       = Phy(c,v,kk);
+            Coverage_pct(r)  = Cov(c,v,kk);
+            MaxGap_m3h(r)    = Gap(c,v,kk);
+            Plant_turndown(r)= Tdn(c,v,kk);
+            Jstar(r)         = jstar(c);
+        end
+    end
+end
+
+T = table(Configuration, Vessels, Trains, VessPerTrain, DividesEvenly, ...
+          Area_train_m2, Qf_min, Qf_des, Qf_max, Phyd_kW, ...
+          Coverage_pct, MaxGap_m3h, Plant_turndown, Jstar);
+writetable(T,'train_staging.csv');
+
+% --- the pump specification, one row per design at its recommended k ----
+fprintf('=============== PUMP SPECIFICATION PER DESIGN ===============\n');
+fprintf('%-30s %5s %6s %7s %9s %9s %9s %9s %6s\n', ...
+        'configuration','vess','trains','v/train','Qf min','Qf des','Qf max','P_hyd','exact');
+fprintf('%-30s %5s %6s %7s %9s %9s %9s %9s %6s\n', ...
+        '','','','','m3/h','m3/h','m3/h','kW','');
+for c = 1:nC
+    for v = 1:nV
+        kk = k_rec(c,v);
+        fprintf('%-30s %5d %6d %7.1f %9.1f %9.1f %9.1f %9.1f %6s\n', ...
+                CFGS(c), VESS(v), kk, VESS(v)/kk, ...
+                Qlo(c,v,kk), Qde(c,v,kk), Qhi(c,v,kk), Phy(c,v,kk), exact_rec(c,v));
+    end
+end
+fprintf('Head is the same for every row: %.0f - %.0f m.\n', ...
+        min(dPlo)*1e5/(1025*9.81), max(dPhi)*1e5/(1025*9.81));
+fprintf('Recommended trains = smallest k >= j* that divides the vessel\n');
+fprintf('count exactly.  "exact = NO" means no such k exists up to %d.\n', K_MAX);
+fprintf('=============================================================\n\n');
+
+save('train_staging.mat','T','CFGS','VESS','n_elem','R_set', ...
+     'J_lo','J_hi','J_des','dPhi','dPlo','jstar','bandR', ...
+     'Qlo','Qde','Qhi','Atr','Phy','Cov','Gap','Tdn','k_rec');
+
+%% ====== 7.  FIGURE 1 - STAIRCASES, ONE PANEL PER CONFIGURATION ========
+v_ref = find(VESS == REF_VESS, 1);
+assert(~isempty(v_ref), 'REF_VESS = %g is not in VESS.', REF_VESS);
+
+figure('Name','train_staging 1/2 - reachable flow','Color','w', ...
+       'Position',[60 200 1120 720]);
+for c = 1:nC
+    kk = min(K_MAX, jstar(c)+2);          % enough stages to show continuity
+    lo = Qlo(c,v_ref,kk);  hi = Qhi(c,v_ref,kk);  de = Qde(c,v_ref,kk);
+
+    ax = subplot(2,2,c);  hold(ax,'on');  grid(ax,'on');  box(ax,'on');
+    cj = lines(kk);
+    for j = 1:kk
+        patch(ax, [j*lo j*hi j*hi j*lo], [j-0.32 j-0.32 j+0.32 j+0.32], ...
+              cj(j,:), 'FaceAlpha',0.35, 'EdgeColor',cj(j,:), 'LineWidth',1.1);
+        plot(ax, j*de, j, 'o', 'MarkerSize',6, 'MarkerFaceColor','k', ...
+             'MarkerEdgeColor','k');
+    end
+    for j = 1:kk-1
+        if j*hi < (j+1)*lo
+            patch(ax, [j*hi (j+1)*lo (j+1)*lo j*hi], ...
+                  [0.4 0.4 kk+0.6 kk+0.6], [0.85 0.25 0.25], ...
+                  'FaceAlpha',0.12, 'EdgeColor','none');
+        end
+    end
+    xlabel(ax,'Plant feed flow  Q_f  (m^3/h)');
+    ylabel(ax,'Trains online');
+    yticks(ax,1:kk);  ylim(ax,[0.4 kk+0.6]);  xlim(ax,[0 kk*hi*1.05]);
+    title(ax, sprintf('%s\nband %.0f-%.0f LMH,  j* = %d,  %d vessels', ...
+          CFGS(c), J_lo(c), J_hi(c), jstar(c), REF_VESS), 'FontSize',9);
+end
+sgtitle(sprintf(['Reachable operating flow - red bands are flows the plant ' ...
+                 'cannot hold\n%d vessels, %d elements per vessel, R = %.0f %%'], ...
+                 REF_VESS, n_elem, R_set*100));
+
+%% ====== 8.  FIGURE 2 - COVERAGE AND TURNDOWN, ALL CONFIGURATIONS ======
+% Both are ratios, so they do not depend on plant size: one curve per
+% configuration covers all three sizes.
+figure('Name','train_staging 2/2 - staging granularity','Color','w', ...
+       'Position',[1200 200 720 720]);
+col = lines(nC);
+
+subplot(2,1,1); hold on; grid on; box on;
+for c = 1:nC
+    plot(1:K_MAX, squeeze(Cov(c,1,:)), 'o-', 'Color',col(c,:), 'LineWidth',1.7, ...
+         'MarkerFaceColor',col(c,:), 'MarkerSize',5, ...
+         'DisplayName',sprintf('%s  (j* = %d)', CFGS(c), jstar(c)));
+    xline(jstar(c), ':', 'Color',col(c,:), 'LineWidth',1.2, 'HandleVisibility','off');
+end
 xlabel('Number of parallel trains');
-title(sprintf(['Staging granularity - %s\nband %.0f-%.0f LMH ' ...
-               '(single-train turndown %.2f:1)'], ...
-               cfg_name, J_lo, J_hi, band_ratio));
+ylabel('Reachable share of flow range  (%)');
+ylim([0 105]);  xlim([1 K_MAX]);
+title('Coverage - independent of plant size (it is a ratio)');
+legend('Location','southeast','Box','off','FontSize',8);
 
-fprintf('Saved train_staging.csv\n');
+subplot(2,1,2); hold on; grid on; box on;
+for c = 1:nC
+    plot(1:K_MAX, squeeze(Tdn(c,1,:)), 's--', 'Color',col(c,:), 'LineWidth',1.5, ...
+         'DisplayName',sprintf('%s  (%.2f:1 per train)', CFGS(c), bandR(c)));
+end
+xlabel('Number of parallel trains');
+ylabel('Plant turndown ratio  (max/min)');
+xlim([1 K_MAX]);
+title('Turndown - read together with coverage above');
+legend('Location','northwest','Box','off','FontSize',8);
+
+fprintf('Saved train_staging.csv and train_staging.mat\n');
