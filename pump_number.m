@@ -111,10 +111,10 @@ for c = 1:nC
 
             % reachable total flow = union over j = 1..kk of j*[Qlo,Qhi]
             lo = Qlo(c,v,kk);  hi = Qhi(c,v,kk);
-            grid  = linspace(lo, kk*hi, 20000);
-            reach = false(size(grid));
+            qgrid = linspace(lo, kk*hi, 20000);
+            reach = false(size(qgrid));
             for j = 1:kk
-                reach = reach | (grid >= j*lo & grid <= j*hi);
+                reach = reach | (qgrid >= j*lo & qgrid <= j*hi);
             end
             Cov(c,v,kk) = 100*sum(reach)/numel(reach);
             Tdn(c,v,kk) = kk*hi/lo;
