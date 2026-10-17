@@ -9,15 +9,15 @@
 %                     ratio of only J_hi/J_lo (1.24 to 1.42 depending on
 %                     pretreatment)
 %    between trains : trains are switched on and off, so with j of k
-%                     trains online the reachable feed flow is
-%                     j * [Q_lo, Q_hi]
+%                     trains online the reachable feed flow is j * [Q_lo,
+%                     Q_hi]
 %
 %  Stepping from j to j+1 trains leaves no gap only when
 %      j*J_hi >= (j+1)*J_lo    ->    j >= J_lo/(J_hi - J_lo)
-%  Below that threshold the reachable set has holes: flows the plant
-%  cannot hold steadily.  Under PV those holes are where available solar
-%  power has to be curtailed, so this is the hydraulic origin of the
-%  curtailment term - not an assumption.
+%  Below that threshold the reachable set has holes: flows the plant cannot
+%  hold steadily.  Under PV those holes are where available solar power has
+%  to be curtailed, so this is the hydraulic origin of the curtailment term
+%  - not an assumption.
 %
 %  Inputs : design_data.mat, osmotic_pressure_recovery.mat,
 %           A_temp_data.mat, salinity_and_temp_mean.mat
