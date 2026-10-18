@@ -15,7 +15,7 @@ clear; close all; clc;
 
 %% ---- fixed hardware and operating point ------------------------------
 n_elem = 7;        % elements per vessel
-n_vess = 1;        % vessels
+n_vess = 96;        % vessels
 R_set  = 0.35;     % system recovery, fraction
 P_max  = 83;       % element pressure rating, bar
 rho_sw = 1025;  g = 9.81;
