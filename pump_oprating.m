@@ -68,9 +68,27 @@ d = L.design;
 A_train = d.A_mem / k_trains;              % m2 per train
 R       = d.R_set;
 bar2m   = L.bar2m;
-dates   = L.dates;
+dates   = L.dates(:).';
 pi_avg  = L.pi_avg;                        % bar [1 x 366]
 A_T     = L.A_T;                           % LMH/bar [1 x 366]
+
+% --- make the date axis safe ------------------------------------------
+% Guard against a dates vector stored as datenum, as the wrong type, or
+% with an absurd epoch - any of which makes the time axis unreadable.
+nDchk = numel(pi_avg);
+if ~isdatetime(dates) || numel(dates) ~= nDchk
+    if isnumeric(dates) && numel(dates) == nDchk && all(dates > 6e5 & dates < 8e5)
+        dates = datetime(dates, 'ConvertFrom', 'datenum');     % was a datenum
+    else
+        dates = datetime(2025,7,31) + caldays(0:nDchk-1);      % rebuild
+        warning('pumpOperating:dates', ...
+                'dates rebuilt from scratch - check the source file.');
+    end
+elseif year(dates(1)) < 1900 || year(dates(1)) > 2100
+    dates = datetime(2025,7,31) + caldays(0:nDchk-1);
+    warning('pumpOperating:dates', ...
+            'dates had an implausible epoch and were rebuilt.');
+end
 
 fprintf('\n%s\n', repmat('=',1,62));
 fprintf('%s, %d elements x %d vessels, R = %.0f %%\n', ...
@@ -185,6 +203,41 @@ plot(dates, SEC_hyd, '--', 'LineWidth',1.1); grid on;
 ylabel('SEC  (kWh/m^3)'); xlabel('date');
 legend('electrical','hydraulic','Location','best','Box','off');
 title('Specific energy - electrical must sit above hydraulic');
+
+%% ============ 7c.  FIGURE 3 - PART LOAD ACROSS THE FLUX BAND =========
+% At the design flux the flow is FIXED, so eta and speed barely move from
+% day to day - that is why figure 2 looks flat.  The variation that matters
+% for a PV plant happens across the BAND, as the plant turns down.
+[~, tHot] = max(H_des);   [~, tCold] = min(H_des);
+
+figure('Name','pumpOperating 3/3 - part load','Color','w','Position',[450 120 760 620]);
+
+subplot(3,1,1); hold on; grid on; box on;
+plot(Jset, nreq(:,tHot),  'r-', 'LineWidth',1.8, 'DisplayName','worst day');
+plot(Jset, nreq(:,tCold), 'b-', 'LineWidth',1.8, 'DisplayName','best day');
+yline(n_max,'k:','HandleVisibility','off');
+yline(n_min,'k:','HandleVisibility','off');
+xline(d.J_design,'k--','DisplayName','design flux');
+ylabel('speed  n/n_{nom}');
+title('Required speed across the flux band - outside the dotted lines is unreachable');
+legend('Location','northwest','Box','off','FontSize',8);
+
+subplot(3,1,2); hold on; grid on; box on;
+plot(Jset, 100*eta(:,tHot),  'r-', 'LineWidth',1.8);
+plot(Jset, 100*eta(:,tCold), 'b-', 'LineWidth',1.8);
+xline(d.J_design,'k--');
+ylabel('\eta  (%)');
+title('Pump efficiency as the plant turns down - this is the part-load penalty');
+
+subplot(3,1,3); hold on; grid on; box on;
+Qp_set = Jset * A_train / 1000;                       % m3/h permeate per train
+plot(Jset, Pel(:,tHot)./Qp_set,  'r-', 'LineWidth',1.8, 'DisplayName','worst day');
+plot(Jset, Pel(:,tCold)./Qp_set, 'b-', 'LineWidth',1.8, 'DisplayName','best day');
+xline(d.J_design,'k--','HandleVisibility','off');
+xlabel('Commanded flux  J_w  (LMH)');
+ylabel('SEC_{el}  (kWh/m^3)');
+title('Electrical specific energy against turndown');
+legend('Location','best','Box','off','FontSize',8);
 
 %% ====================== 8.  SAVE (guarded)  ===========================
 if CURVE_SOURCE == "DATASHEET"
