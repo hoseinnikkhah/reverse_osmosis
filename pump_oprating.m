@@ -45,7 +45,7 @@ k_trains = 3;              % parallel trains (from train_staging.m)
 
 eta_motor = 0.96;          % motor efficiency      (datasheet)
 eta_vfd   = 0.98;          % drive efficiency      (datasheet)
-n_min     = 0.70;          % minimum speed ratio   (pump datasheet)
+n_min     = 0.78;          % minimum speed ratio   (pump datasheet)
 n_max     = 1.00;          % maximum speed ratio
 
 % ---- PUMP CURVES --------------------------------------------------------
