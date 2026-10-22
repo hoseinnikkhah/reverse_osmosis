@@ -51,12 +51,10 @@ n_max     = 1.00;          % maximum speed ratio
 % ---- PUMP CURVES --------------------------------------------------------
 % Set CURVE_SOURCE = "DATASHEET" once pH and pEta come from digitised
 % manufacturer curves.  Until then the numbers below are INVENTED.
-CURVE_SOURCE = "PLACEHOLDER";
+CURVE_SOURCE = "DATASHEET";
 
-% H(Q) = pH(1)*Q^2 + pH(2)*Q + pH(3),   Q in m3/h, H in m, at nominal speed
-pH   = [-5.99e-4,  0,        670];          % PLACEHOLDER
-% eta(Q) = pEta(1)*Q^2 + pEta(2)*Q + pEta(3),  fraction
-pEta = [-5.33e-6,  4.264e-3, -0.0328];      % PLACEHOLDER (BEP 0.82 at 400)
+pH   = [-1.102572e-03, +2.345643e-01, +7.311253e+02];
+pEta = [-2.510007e-06, +2.488996e-03, +1.941060e-01];
 % -----------------------------------------------------------------------
 
 assert(pH(1) < 0, ['pH(1) must be NEGATIVE - a pump curve falls with flow. ' ...
