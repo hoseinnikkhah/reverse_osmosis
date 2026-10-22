@@ -154,7 +154,7 @@ figure('Name','fitPumpCurve - head','Color','w','Position',[80 350 640 460]);
 hold on; grid on; box on;
 plot(Q,  H,  'ko', 'MarkerFaceColor','k', 'DisplayName','digitised');
 plot(Qs, polyval(pH,Qs), 'b-', 'LineWidth',1.8, 'DisplayName','quadratic fit');
-plot(Q_DUTY, H_DUTY, 'rp', 'MarkerSize',16, 'MarkerFaceColor','r', ...
+plot(Q_DUTY, H_DUTY, 'ro', 'MarkerSize',6, 'MarkerFaceColor','r', ...
      'DisplayName','required duty');
 xlabel('Q  (m^3/h)');  ylabel('H  (m)');
 title(sprintf('%s - head\nR^2 = %.5f', PUMP_LABEL, R2(H,Hfit)));
