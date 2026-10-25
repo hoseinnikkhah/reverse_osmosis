@@ -47,9 +47,10 @@ k_trains = 3;
 
 eta_motor = 0.96;          % motor efficiency
 eta_vfd   = 0.98;          % drive efficiency
-n_min     = 0.817;         % HP pump min speed = sqrt(pi_avg/shutoff)
-                           %   = sqrt(447/670.4) for this curve.  Below it
-                           %   the pump deadheads against osmotic pressure.
+n_min     = 0.807;         % HP pump min speed = sqrt(pi_avg/shutoff)
+                           %   = sqrt(436/668.0) for this curve, from the
+                           %   real max pi_avg = 43.79 bar.  Below it the
+                           %   pump deadheads against osmotic pressure.
 n_max     = 1.00;
 
 % ---- ENERGY RECOVERY DEVICE -------------------------------------------
@@ -75,20 +76,24 @@ dP_vessel  = 1.5;          % [EST] bar, drop along one 7-element vessel.
 dP_pipe    = 0.5;          % [EST] bar, ERD and piping losses, booster leg
 
 % ---- HP PUMP (sized for Q_p, roughly a third of the no-ERD flow) -------
-% From fitPumpCurve.m, BRANCH = "ERD", duty Q_p = 133.2 m3/h at 584 m.
+% Lowara e-MP100B/08 (8A curve), 50 Hz, from fitPumpCurve.m BRANCH = "ERD",
+% duty Q_p = 133.2 m3/h at 588 m.  R2: head 0.99919, efficiency 0.99863.
+PUMP_MODEL   = "Lowara e-MP100B/08, 50 Hz (8A)";
 CURVE_SOURCE = "DATASHEET";
-pH    = [-5.606349e-03, +4.635956e-01, +6.704273e+02];
-pEta  = [-2.121827e-05, +8.544103e-03, +7.276717e-02];
-Q_FIT = [30 331];          % m3/h range the curve was digitised over.
+pH    = [-7.484891e-03, +5.836656e-01, +6.680355e+02];
+pEta  = [-2.456961e-05, +8.656122e-03, +5.653247e-02];
+Q_FIT = [27 290];          % m3/h range the curve was digitised over.
+                           % Matches the printed end of the 8A curve.
                            % Outside it a falling parabola returns negative
                            % head and the speed solve is meaningless.
 
-% Honest health warning that travels with the saved results.  The fitted
-% curve gives eta_BEP = 0.933, which no pump of this size achieves; since
-% eta = QH/(367P), the digitised POWER is ~4.5 % low.  Head is sound
-% (R2 = 0.99924), so heads, speeds and flows are trustworthy and the
-% efficiency-derived quantities are optimistic by about that margin.
-CURVE_CAVEAT = "eta_BEP = 0.933 > 0.92: power axis ~4.5% low, SEC optimistic";
+% No outstanding defect in this digitisation, so no caveat.  The check that
+% retired the previous one is recorded instead: the catalogue prints the BEP
+% efficiency on the chart (the "80,7" markers), giving an independent target
+% that the fit reproduces to 1.5 %.  That is a stronger provenance claim than
+% "inside a plausible range", so it travels with the saved results.
+CURVE_CAVEAT = "";
+CURVE_CHECK  = "eta_BEP 0.819 vs catalogue 80.7 % printed on the chart: 1.5 % residual";
 
 % ---- BOOSTER PUMP (low head, high flow) -------------------------------
 % Contributes ~7 % of total power, so a datasheet efficiency is adequate.
@@ -166,6 +171,9 @@ if CURVE_SOURCE ~= "DATASHEET"
     fprintf('\n*** HP PUMP CURVE IS A PLACEHOLDER - RESULTS NOT REAL ***\n');
 elseif strlength(CURVE_CAVEAT) > 0
     fprintf('\n*** CURVE CAVEAT: %s ***\n', CURVE_CAVEAT);
+else
+    fprintf('pump: %s\n', PUMP_MODEL);
+    fprintf('curve verified: %s\n', CURVE_CHECK);
 end
 fprintf('%s\n\n', repmat('=',1,66));
 
@@ -286,8 +294,22 @@ fprintf('CHECK ERD below no-ERD       -> %s\n', string(all(SEC_hyd < SEC_noERD))
 fprintf('\n--- band reachability ---\n');
 fprintf('flux holdable on every day : %d of %d\n', sum(all(okSpd,2)), nJ);
 if ~all(okSpd(:))
-    Jbad = Jset(~all(okSpd,2));
+    bad  = ~all(okSpd,2);
+    Jbad = Jset(bad);
     fprintf('unreachable flux: %.2f - %.2f LMH\n', min(Jbad), max(Jbad));
+    % Distinguish the two failure modes - they have opposite remedies.
+    if any(any(nreq(bad,:) > n_max))
+        fprintf('  cause: n > %.2f, the pump runs out of HEAD at high flux.\n', n_max);
+        fprintf('         Required head rises with flux faster than the pump\n');
+        fprintf('         curve falls, so the two cross.  This is a real design\n');
+        fprintf('         limit, not an error: a higher stage count (/09 rather\n');
+        fprintf('         than /08) lifts the whole curve and recovers the top\n');
+        fprintf('         of the band at the same hydraulic efficiency.\n');
+    end
+    if any(any(nreq(bad,:) < n_min))
+        fprintf('  cause: n < %.2f, the pump deadheads against osmotic\n', n_min);
+        fprintf('         pressure at low flux.  Turndown is limited from below.\n');
+    end
 end
 fprintf('\n');
 
@@ -343,7 +365,8 @@ if CURVE_SOURCE == "DATASHEET"
     [~, base] = fileparts(SYSFILE);
     out = sprintf('erd_operating_%s_k%d.mat', erase(base,'system_curve_'), k_trains);
     save(out, 'd','k_trains','A_train','pH','pEta','CURVE_SOURCE', ...
-         'Q_FIT','CURVE_CAVEAT','SEC_noERD_note', ...
+         'Q_FIT','CURVE_CAVEAT','CURVE_CHECK','PUMP_MODEL', ...
+         'SEC_noERD_note', ...
          'ERD_MODEL','eta_PX','mix_frac','APPLY_MIXING','pi_fac', ...
          'eta_boost','dP_vessel','dP_pipe', ...
          'Jset','Qf_set','Qp_set','Qb_set','Hreq','nreq','etaHP', ...
