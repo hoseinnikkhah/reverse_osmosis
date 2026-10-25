@@ -169,9 +169,16 @@ fprintf('efficiency at duty : %.3f\n', eta_at_duty);
 
 % deadhead speed: where shutoff head n^2*c falls to the static osmotic head
 fprintf('------------------------------------------------\n');
+% Use the REAL osmotic pressure from the loaded design, not a round number.
+% Worst case is the highest pi_avg of the year at zero flux: below that head
+% the pump cannot push any permeate at all.
+pi_head = max(mix_fac*S.pi_avg) * S.bar2m;        % m
 fprintf('shutoff head at nominal speed : %.0f m\n', pH(3));
-fprintf('if pi_avg is ~45 bar (447 m), the pump deadheads below\n');
-fprintf('n = sqrt(447/%.0f) = %.3f of nominal speed.\n', pH(3), sqrt(447/pH(3)));
+fprintf('max pi_avg this design        : %.2f bar  (%.0f m)\n', ...
+        max(mix_fac*S.pi_avg), pi_head);
+fprintf('the pump deadheads below\n');
+fprintf('n = sqrt(%.0f/%.0f) = %.3f of nominal speed.\n', ...
+        pi_head, pH(3), sqrt(pi_head/pH(3)));
 fprintf('Use that as n_min if it exceeds the\n');
 fprintf('mechanical minimum from the datasheet.\n');
 fprintf('================================================\n\n');
@@ -183,7 +190,7 @@ fprintf('CURVE_SOURCE = "DATASHEET";\n');
 fprintf('pH    = [%+.6e, %+.6e, %+.6e];\n', pH(1),   pH(2),   pH(3));
 fprintf('pEta  = [%+.6e, %+.6e, %+.6e];\n', pEta(1), pEta(2), pEta(3));
 fprintf('Q_FIT = [%.0f %.0f];\n', min(Q), max(Q));
-fprintf('n_min = %.3f;\n\n', sqrt(447/pH(3)));
+fprintf('n_min = %.3f;\n\n', sqrt(pi_head/pH(3)));
 if ~ok
     fprintf('*** CHECKS FAILED - fix the digitisation before using these ***\n\n');
 end
