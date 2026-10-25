@@ -47,29 +47,48 @@ k_trains = 3;
 
 eta_motor = 0.96;          % motor efficiency
 eta_vfd   = 0.98;          % drive efficiency
-n_min     = 0.78;          % HP pump minimum speed ratio
+n_min     = 0.817;         % HP pump min speed = sqrt(pi_avg/shutoff)
+                           %   = sqrt(447/670.4) for this curve.  Below it
+                           %   the pump deadheads against osmotic pressure.
 n_max     = 1.00;
 
 % ---- ENERGY RECOVERY DEVICE -------------------------------------------
-% Energy Recovery Inc. PX, high-pressure series: 83 bar rating,
-% net transfer efficiency 97-98 %, volumetric mixing < 3 %.
-% A single PX Q400 covers 65.9-90.9 m3/h; a PX PowerTrain array covers
-% 182-682 m3/h.  Check Q_b per train against these.
+% PROVENANCE OF EVERY NUMBER IN THIS BLOCK.
+%   [CAT] printed in the Energy Recovery Inc. 2024 Water Products Catalog,
+%         PX PowerTrain and high-pressure PX pages.
+%   [EST] engineering estimate, NOT published.  Swept in section 5b, so the
+%         paper reports a band instead of a single invented value.
 ERD_MODEL  = "PX PowerTrain";
-eta_PX     = 0.98;         % net transfer efficiency  (catalogue)
-mix_frac   = 0.03;         % volumetric mixing        (catalogue)
-PX_Qmin    = 182;          % m3/h, model flow range
-PX_Qmax    = 682;
-PX_Pmax    = 83;           % bar, pressure rating
+PX_Qmin    = 182;          % [CAT] m3/h  (800 gpm)
+PX_Qmax    = 682;          % [CAT] m3/h  (3,000 gpm)
+PX_Pmax    = 83;           % [CAT] bar   ("up to 83 bar / 1,200 psi")
+eta_PX     = 0.97;         % [CAT] catalogue states 97-98 % PEAK efficiency.
+                           %       Peak is near BEP only, so 0.97 is the
+                           %       base case, 0.98 the optimistic bound.
+mix_frac   = 0.03;         % [CAT] "<3 % volumetric mixing", printed for the
+                           %       PX Q400.  Used here as an upper bound.
 APPLY_MIXING = true;       % include the salinity feedback
 
-dP_vessel  = 1.5;          % bar, pressure drop along one vessel (7 elements)
-dP_pipe    = 0.5;          % bar, ERD and piping losses on the booster leg
+dP_vessel  = 1.5;          % [EST] bar, drop along one 7-element vessel.
+                           %       Replace with the element dP from the
+                           %       membrane design guide at your feed flow.
+dP_pipe    = 0.5;          % [EST] bar, ERD and piping losses, booster leg
 
 % ---- HP PUMP (sized for Q_p, roughly a third of the no-ERD flow) -------
-CURVE_SOURCE = "PLACEHOLDER";
-pH   = [-9.0e-3, +1.5e-1, +7.40e+02];     % PLACEHOLDER - digitise a 100B
-pEta = [-2.0e-5, +5.6e-3, +4.00e-01];     % PLACEHOLDER - BEP ~140 m3/h
+% From fitPumpCurve.m, BRANCH = "ERD", duty Q_p = 133.2 m3/h at 584 m.
+CURVE_SOURCE = "DATASHEET";
+pH    = [-5.606349e-03, +4.635956e-01, +6.704273e+02];
+pEta  = [-2.121827e-05, +8.544103e-03, +7.276717e-02];
+Q_FIT = [30 331];          % m3/h range the curve was digitised over.
+                           % Outside it a falling parabola returns negative
+                           % head and the speed solve is meaningless.
+
+% Honest health warning that travels with the saved results.  The fitted
+% curve gives eta_BEP = 0.933, which no pump of this size achieves; since
+% eta = QH/(367P), the digitised POWER is ~4.5 % low.  Head is sound
+% (R2 = 0.99924), so heads, speeds and flows are trustworthy and the
+% efficiency-derived quantities are optimistic by about that margin.
+CURVE_CAVEAT = "eta_BEP = 0.933 > 0.92: power axis ~4.5% low, SEC optimistic";
 
 % ---- BOOSTER PUMP (low head, high flow) -------------------------------
 % Contributes ~7 % of total power, so a datasheet efficiency is adequate.
@@ -120,6 +139,15 @@ Qf_set = Qof(Jset);                       % feed per train,     m3/h
 Qp_set = Jset * A_train / 1000;           % permeate per train, m3/h
 Qb_set = Qf_set - Qp_set;                 % brine per train,    m3/h
 
+% ---- the HP pump sees Q_p: does the curve actually cover it? ----------
+if min(Qp_set) < Q_FIT(1) || max(Qp_set) > Q_FIT(2)
+    fprintf('\n*** CURVE RANGE ERROR ***\n');
+    fprintf('HP pump must pass Q_p = %.0f - %.0f m3/h, but the curve was\n', ...
+            min(Qp_set), max(Qp_set));
+    fprintf('digitised over only %.0f - %.0f m3/h.\n', Q_FIT(1), Q_FIT(2));
+    error('erdOperating: pump curve does not cover the required flow range.');
+end
+
 Qf_des = Qof(d.J_design);
 Qp_des = d.J_design * A_train / 1000;
 Qb_des = Qf_des - Qp_des;
@@ -136,6 +164,8 @@ if APPLY_MIXING
 end
 if CURVE_SOURCE ~= "DATASHEET"
     fprintf('\n*** HP PUMP CURVE IS A PLACEHOLDER - RESULTS NOT REAL ***\n');
+elseif strlength(CURVE_CAVEAT) > 0
+    fprintf('\n*** CURVE CAVEAT: %s ***\n', CURVE_CAVEAT);
 end
 fprintf('%s\n\n', repmat('=',1,66));
 
@@ -155,6 +185,30 @@ fprintf('max differential pressure: %.2f bar   (rating %.0f bar)  %s\n', ...
 fprintf('net transfer efficiency  : %.3f\n', eta_PX);
 fprintf('plant total brine flow   : %.1f m3/h over %d trains\n\n', ...
         k_trains*Qb_des, k_trains);
+
+%% ============ 5b.  SENSITIVITY TO THE TWO UNPUBLISHED NUMBERS =========
+% dP_vessel and eta_PX are the only ERD inputs not printed in the
+% catalogue.  Quantify them before quoting any SEC.
+fprintf('--- sensitivity: the inputs that are NOT from the catalogue ---\n');
+H_w   = max(pi_avg_eff + d.J_design./A_T) * bar2m;
+eta_s = polyval(pEta, Qp_des);
+PHP_s = 1025*9.81*(Qp_des/3600)*H_w/max(eta_s,eps)/1000;
+fprintf('%8s %7s | %9s %9s | %9s %9s\n', ...
+        'dP_vess','eta_PX','H_boost','P_boost','P_total','vs base');
+base = NaN;  shr = NaN;
+for ePX = [0.97 0.98]
+    for dPv = [0.8 1.5 2.5]
+        Hb  = H_w*(1-ePX) + ePX*dPv*bar2m + dP_pipe*bar2m;
+        PBO = 1025*9.81*(Qb_des/3600)*Hb/eta_boost/1000;
+        tot = PHP_s + PBO;
+        if isnan(base), base = tot; end
+        shr = 100*PBO/tot;
+        fprintf('%8.1f %7.2f | %8.1fm %8.1fkW | %8.1fkW %+8.1f %%\n', ...
+                dPv, ePX, Hb, PBO, tot, 100*(tot/base-1));
+    end
+end
+fprintf('Booster is only ~%.0f %% of plant power, so even a 50 %% error in\n', shr);
+fprintf('H_boost moves total power a few per cent.  Quote this as the band.\n\n');
 
 %% ============ 6.  SWEEP THE BAND OVER THE YEAR  =======================
 a = pH(1);  b = pH(2);  c = pH(3);
@@ -199,8 +253,12 @@ SEC_el  = Pel_des / Qp_des;
 SEC_hyd = (1025*9.81*(Qp_des/3600).*H_des + ...
            1025*9.81*(Qb_des/3600).*Hbo_des)/1000 / Qp_des;
 
-% what the same plant would need with no ERD at all
-P_noERD_hyd = 1025*9.81*(Qf_des/3600).*H_des/1000;
+% What the same plant would need with no ERD at all.
+% BUG FIX: with no PX there is NO brine mixing, so the baseline head must be
+% rebuilt WITHOUT pi_fac.  Using the mixed head here penalised the baseline
+% by an effect it does not have and overstated the ERD saving by ~0.8 %.
+H_des_noMix = (pi_avg + d.J_design./A_T) * bar2m;      % 1 x nD, no mixing
+P_noERD_hyd = 1025*9.81*(Qf_des/3600).*H_des_noMix/1000;
 SEC_noERD   = P_noERD_hyd / Qp_des;
 
 fprintf('--- at the design flux, across the year ---\n');
@@ -280,10 +338,12 @@ title(sprintf('Flow split - PX must cover Q_b across the whole band\n%s', ERD_MO
 legend('Location','best','Box','off');
 
 %% ====================== 9.  SAVE (guarded)  ===========================
+SEC_noERD_note = "baseline head excludes PX mixing (no PX in that case)";
 if CURVE_SOURCE == "DATASHEET"
     [~, base] = fileparts(SYSFILE);
     out = sprintf('erd_operating_%s_k%d.mat', erase(base,'system_curve_'), k_trains);
     save(out, 'd','k_trains','A_train','pH','pEta','CURVE_SOURCE', ...
+         'Q_FIT','CURVE_CAVEAT','SEC_noERD_note', ...
          'ERD_MODEL','eta_PX','mix_frac','APPLY_MIXING','pi_fac', ...
          'eta_boost','dP_vessel','dP_pipe', ...
          'Jset','Qf_set','Qp_set','Qb_set','Hreq','nreq','etaHP', ...
