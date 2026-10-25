@@ -78,7 +78,7 @@ dP_pipe    = 0.5;          % [EST] bar, ERD and piping losses, booster leg
 % ---- HP PUMP (sized for Q_p, roughly a third of the no-ERD flow) -------
 % Lowara e-MP100B/08 (8A curve), 50 Hz, from fitPumpCurve.m BRANCH = "ERD",
 % duty Q_p = 133.2 m3/h at 588 m.  R2: head 0.99919, efficiency 0.99863.
-PUMP_MODEL   = "Lowara e-MP100B/08, 50 Hz (8A)";
+PUMP_MODEL   = "Lowara e-MP100B/09, 50 Hz (8A)";
 CURVE_SOURCE = "DATASHEET";
 pH    = [-8.327209e-03, +6.249027e-01, +7.526340e+02];
 pEta  = [-2.437356e-05, +8.576757e-03, +6.200092e-02];
@@ -93,7 +93,7 @@ Q_FIT = [27 290];          % m3/h range the curve was digitised over.
 % that the fit reproduces to 1.5 %.  That is a stronger provenance claim than
 % "inside a plausible range", so it travels with the saved results.
 CURVE_CAVEAT = "";
-CURVE_CHECK  = "eta_BEP 0.819 vs catalogue 80.7 % printed on the chart: 1.5 % residual";
+CURVE_CHECK  = "eta_BEP 0.817 vs catalogue 80.7 % (+1.2 %); BEP flow within 0.12 % of the 8A fit";
 
 % ---- BOOSTER PUMP (low head, high flow) -------------------------------
 % Contributes ~7 % of total power, so a datasheet efficiency is adequate.
