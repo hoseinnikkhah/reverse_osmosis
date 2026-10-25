@@ -21,7 +21,7 @@ fprintf('>>> running fitPumpCurve.m\n');
 
 %% ====================== 1.  THE DIGITISED DATA  =======================
 % ---- paste your two tables here ---------------------------------------
-PUMP_LABEL = 'e-MP150A/05  (curve <label>)';   % for the figure titles
+PUMP_LABEL = 'e-MP100B/09  (50Hz)';   % for the figure titles
 
 % ---- THE DUTY POINT IS NO LONGER HARD CODED --------------------------
 % It is derived from the same system-curve file the operating codes use,
