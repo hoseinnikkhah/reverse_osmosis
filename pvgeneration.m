@@ -45,9 +45,9 @@ G_ref      = 1000;         % reference irradiance, W/m2
 T_ref      = 25;           % reference cell temperature, degC
 
 % ---- Faiman module temperature coefficients ---------------------------
-% PVGIS uses these for free-standing mounting; confirm against its docs.
-U0 = 26.9;                 % W/(m2 K)      constant term
-U1 = 6.20;                 % W s/(m3 K)    wind term
+% Faiman (2008), Prog. Photovolt. 16:307-315, Table III "Combined Fit"
+U0 = 25.0;                                         %[Faiman 2008]
+U1 = 6.84;                                         %[Faiman 2008]
 
 % ---- balance of system -------------------------------------------------
 SYS_LOSS = 0.14;           % PVGIS default: cabling, soiling, mismatch,
