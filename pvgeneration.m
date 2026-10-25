@@ -1,188 +1,146 @@
-%% pvGeneration.m
-%  Turn PVGIS hourly radiation files into an hourly AC power series.
+%% pvgisFetch.m
+%  Download PVGIS hourly irradiance and weather for one point, or for a
+%  grid of points, and save them in a form the PV layer can read.
 %
-%  WHY THIS IS NORMALISED PER kWp
-%    The DC power model is LINEAR in installed peak power:
-%        P_dc = P_peak * (G/1000) * [1 + gamma*(T_mod-25)]
-%    so this script computes p_unit, the AC power per kWp installed, once.
-%    The whole PV-capacity sweep is then P_ac = P_peak * p_unit - no
-%    re-download, no recomputation.  That is the axis of the capacity-ratio
-%    study, so it is worth having it cost nothing.
+%  PVGIS is a POINT service: unlike CMEMS it returns one time series per
+%  call, not a gridded field.  That is the right thing for this study - a
+%  PV array sits at one location, and averaging irradiance over a box
+%  would smooth away the cloud transients the dispatch model exists to
+%  resolve.  Looping the API is only for spatial SENSITIVITY: pick one
+%  point as the base case and treat the rest as a check.
 %
-%  MODULE TEMPERATURE - Faiman (wind-dependent)
-%        T_mod = T_air + G / (U0 + U1*w)
-%    This is why WS10m was downloaded.  The simpler NOCT form ignores wind
-%    and overstates module temperature on breezy coastal sites, which is
-%    exactly where this plant is.
+%  API (non-interactive service, v5_2):
+%    https://re.jrc.ec.europa.eu/api/v5_2/seriescalc
+%      lat, lon        decimal degrees, south and west negative
+%      startyear/endyear   omit for the full database span
+%      angle           inclination from horizontal, degrees
+%      aspect          0 = south, 90 = west, -90 = east
+%      outputformat    csv
+%      components      1 to also get beam / diffuse / reflected
 %
-%  WHAT IS AND IS NOT INCLUDED
-%    Included : irradiance, module temperature, system losses (cabling,
-%               soiling, mismatch, INVERTER - PVGIS bundles these in its
-%               14 % default, so do NOT apply a separate inverter term).
-%    Excluded : spectral and incidence-angle effects, degradation, shading,
-%               low-light efficiency roll-off.  All second order for a
-%               plant whose startup threshold is ~265 kW; state the omission.
+%  RETURNED COLUMNS (confirm on your first download - PVGIS has changed
+%  these between versions):
+%      time    timestamp, yyyymmdd:HHMM
+%      G(i)    global irradiance on the inclined plane, W/m2
+%      H_sun   sun height, degrees
+%      T2m     air temperature at 2 m, degC
+%      WS10m   wind speed at 10 m, m/s
+%      Int     1 if the values are reconstructed
 %
-%  Inputs : one or more PVGIS "Timeseries_*.csv" hourly radiation files
-%  Output : pv_generation.mat  -  p_unit [kW_ac per kWp], time, year index
+%  Output : pv_raw_<lat>_<lon>.mat  per point, plus pvgis_points.mat
+%
+%  NOTE  this script has not been run against the live service from here,
+%  so check the first download before trusting the parse.  The parser
+%  finds the header line rather than assuming a fixed number of metadata
+%  rows, which is the part most likely to change.
 
-clear; close all; clc;
-fprintf('>>> running pvGeneration.m\n');
+clear; clc;
+fprintf('>>> running pvgisFetch.m\n');
 
 %% ====================== 1.  SETTINGS  =================================
 % ---- edit this block only ---------------------------------------------
-FILES = { ...
-    'Timeseries_37.477_15.082_SA3_35deg_0deg_2020_2021.csv'
-    'Timeseries_37.477_15.082_SA3_35deg_0deg_2021_2022.csv' };
+% One point: give scalars.  A grid: give vectors and set GRID = true.
+LAT   = 37.05;             % <-- centroid of your CMEMS box, on the coast
+LON   = 14.25;             % <--
+GRID  = false;             % true to sweep the vectors below
+LAT_V = [36.9 37.05 37.2];
+LON_V = [14.0 14.25 14.5];
 
-% ---- module electrical parameters -------------------------------------
-% SOURCE THESE FROM A REAL MODULE DATASHEET, the way the pump curve came
-% from a real catalogue.  The values below are representative c-Si figures,
-% NOT a specific product.  Replace them and record the module in MODULE_REF.
-MODULE_REF = "PLACEHOLDER - representative crystalline silicon";
-gamma_P    = -0.0040;      % power temperature coefficient, 1/degC  (~-0.40 %/K)
-G_ref      = 1000;         % reference irradiance, W/m2
-T_ref      = 25;           % reference cell temperature, degC
+YEAR0 = [];                % [] = first year the database offers
+YEAR1 = [];                % [] = last year
+ANGLE = 30;                % module tilt from horizontal, degrees
+ASPECT= 0;                 % 0 = due south
+COMPONENTS = 0;            % 1 also returns beam / diffuse / reflected
 
-% ---- Faiman module temperature coefficients ---------------------------
-% PVGIS uses these for free-standing mounting; confirm against its docs.
-U0 = 26.9;                 % W/(m2 K)      constant term
-U1 = 6.20;                 % W s/(m3 K)    wind term
-
-% ---- balance of system -------------------------------------------------
-SYS_LOSS = 0.14;           % PVGIS default: cabling, soiling, mismatch,
-                           % INVERTER.  Do not add an inverter term on top.
-
-DROP_FEB29 = true;         % leap days have no day-of-year match in the
-                           % seawater year; dropping is cleaner than clamping
+API = 'https://re.jrc.ec.europa.eu/api/v5_2/seriescalc';
+OUTDIR = pwd;
 % -----------------------------------------------------------------------
 
-%% ====================== 2.  READ AND MERGE  ===========================
-T = table();
-for f = 1:numel(FILES)
-    if ~isfile(FILES{f})
-        error('pvGeneration: cannot find %s', FILES{f});
+if GRID
+    [LA, LO] = meshgrid(LAT_V, LON_V);
+    pts = [LA(:) LO(:)];
+    fprintf('grid mode: %d points\n', size(pts,1));
+else
+    pts = [LAT LON];
+end
+
+%% ====================== 2.  FETCH  ====================================
+files = strings(size(pts,1),1);
+for p = 1:size(pts,1)
+    la = pts(p,1);  lo = pts(p,2);
+
+    q = sprintf('%s?lat=%.5f&lon=%.5f&angle=%g&aspect=%g&outputformat=csv&components=%d', ...
+                API, la, lo, ANGLE, ASPECT, COMPONENTS);
+    if ~isempty(YEAR0), q = sprintf('%s&startyear=%d', q, YEAR0); end
+    if ~isempty(YEAR1), q = sprintf('%s&endyear=%d',   q, YEAR1); end
+
+    raw = fullfile(OUTDIR, sprintf('pvgis_%.3f_%.3f.csv', la, lo));
+    fprintf('  [%d/%d] lat %.3f lon %.3f ... ', p, size(pts,1), la, lo);
+    try
+        websave(raw, q);
+    catch ME
+        fprintf('FAILED\n');
+        fprintf('    %s\n', ME.message);
+        fprintf('    If this is a connection error, download by hand from\n');
+        fprintf('    re.jrc.ec.europa.eu/pvg_tools/en/ (HOURLY DATA tab) and\n');
+        fprintf('    run section 3 on the saved file instead.\n');
+        continue
     end
-    Tf = parsePVGIS(FILES{f});
-    fprintf('  %s : %d rows, %s to %s\n', FILES{f}, height(Tf), ...
-            datestr(Tf.time(1),'dd mmm yyyy'), datestr(Tf.time(end),'dd mmm yyyy'));
-    T = [T; Tf];                                              %#ok<AGROW>
+
+    T = parsePVGIS(raw);
+    fprintf('%d rows, %s to %s\n', height(T), ...
+            datestr(T.time(1),'dd mmm yyyy'), datestr(T.time(end),'dd mmm yyyy'));
+
+    out = fullfile(OUTDIR, sprintf('pv_raw_%.3f_%.3f.mat', la, lo));
+    site = struct('lat',la, 'lon',lo, 'angle',ANGLE, 'aspect',ASPECT, ...
+                  'source',"PVGIS v5_2 seriescalc", 'fetched',datetime('now'));
+    save(out, 'T', 'site');
+    files(p) = string(out);
 end
 
-% the PVGIS files overlap, so de-duplicate on the timestamp
-[~, iu] = unique(T.time, 'stable');
-nDup = height(T) - numel(iu);
-T = T(iu,:);
-T = sortrows(T, 'time');
-if nDup > 0
-    fprintf('  removed %d duplicated hours (the files overlap on a year)\n', nDup);
-end
+save(fullfile(OUTDIR,'pvgis_points.mat'), 'pts', 'files', 'ANGLE', 'ASPECT');
+fprintf('\nSaved %d point file(s) + pvgis_points.mat\n', sum(files ~= ""));
 
-if DROP_FEB29
-    isLeapDay = month(T.time)==2 & day(T.time)==29;
-    if any(isLeapDay)
-        fprintf('  dropped %d leap-day hours\n', sum(isLeapDay));
-        T(isLeapDay,:) = [];
-    end
-end
-
-yrs = unique(year(T.time));
-fprintf('  %d complete-ish years available: %s\n', numel(yrs), ...
-        strjoin(string(yrs),', '));
-
-%% ====================== 3.  THE MODEL  ================================
-G = T.Gi;  Ta = T.T2m;  w = T.WS10m;
-
-T_mod = Ta + G ./ (U0 + U1*w);                 % Faiman, degC
-f_T   = 1 + gamma_P .* (T_mod - T_ref);        % temperature derate
-p_dc  = (G / G_ref) .* f_T;                    % kW_dc per kWp
-p_dc(G <= 0) = 0;                              % no output in the dark
-p_unit = max(p_dc * (1 - SYS_LOSS), 0);        % kW_ac per kWp
-
-T.T_mod  = T_mod;
-T.p_unit = p_unit;
-
-%% ====================== 4.  REPORT  ===================================
-fprintf('\n%s\n', repmat('=',1,62));
-fprintf('PV GENERATION, per kWp installed\n');
-fprintf('module      : %s\n', MODULE_REF);
-fprintf('gamma_P     : %+.4f /degC      Faiman U0 %.1f, U1 %.2f\n', gamma_P, U0, U1);
-fprintf('system loss : %.0f %% (includes the inverter)\n', 100*SYS_LOSS);
-fprintf('%s\n', repmat('-',1,62));
-for y = yrs'
-    k = year(T.time) == y;
-    if sum(k) < 8000, continue; end            % skip partial years
-    fprintf('  %d : %6.0f kWh/kWp/yr   %4.0f full-load hours   peak %.3f kW/kWp\n', ...
-            y, sum(p_unit(k)), sum(p_unit(k)), max(p_unit(k)));
-end
-fprintf('%s\n', repmat('-',1,62));
-hot = T_mod > Ta + 20;
-fprintf('module runs >20 degC above air for %.1f %% of hours\n', 100*mean(hot));
-fprintf('max module temperature : %.1f degC (air %.1f at that hour)\n', ...
-        max(T_mod), Ta(T_mod==max(T_mod)));
-fprintf('mean temperature derate while generating : %.1f %%\n', ...
-        100*(1-mean(f_T(G>50))));
-if MODULE_REF.startsWith("PLACEHOLDER")
-    fprintf('\n*** MODULE PARAMETERS ARE PLACEHOLDERS - source gamma_P from a\n');
-    fprintf('    real datasheet before quoting any yield figure ***\n');
-end
-fprintf('%s\n\n', repmat('=',1,62));
-
-%% ====================== 5.  FIGURES  ==================================
-figure('Name','pvGeneration 1/2 - the year','Color','w','Position',[80 320 860 520]);
-subplot(2,1,1); hold on; grid on; box on;
-yb = yrs(find(arrayfun(@(y) sum(year(T.time)==y), yrs') >= 8000, 1));
-k  = year(T.time) == yb;
-plot(T.time(k), p_unit(k), '-', 'Color',[0.85 0.6 0.1], 'LineWidth',0.3);
-ylabel('kW_{ac} per kWp');  title(sprintf('Hourly specific output, %d', yb));
-
-subplot(2,1,2); hold on; grid on; box on;
-d  = dateshift(T.time(k),'start','day');
-dd = unique(d);
-daily = splitapply(@sum, p_unit(k), findgroups(d));
-plot(dd, daily, '-', 'Color',[0.2 0.4 0.75], 'LineWidth',1.2);
-ylabel('kWh/kWp/day');  xlabel('date');
-title('Daily yield - the seasonal shape the dispatch has to live with');
-
-figure('Name','pvGeneration 2/2 - temperature','Color','w','Position',[960 320 620 520]);
-hold on; grid on; box on;
-gen = G > 50;
-scatter(Ta(gen), T_mod(gen), 4, G(gen), 'filled');
-plot([min(Ta) max(Ta)], [min(Ta) max(Ta)], 'k--', 'LineWidth',1.2);
-cb = colorbar;  cb.Label.String = 'G(i)  (W/m^2)';
-xlabel('air temperature  (\circC)');  ylabel('module temperature  (\circC)');
-title(sprintf('Faiman model: T_{mod} = T_{air} + G/(%.1f + %.2f w)', U0, U1));
-
-%% ====================== 6.  SAVE  =====================================
-pv = struct('time',T.time, 'p_unit',p_unit, 'G',G, 'T_air',Ta, ...
-            'T_mod',T_mod, 'WS',w, 'gamma_P',gamma_P, 'U0',U0, 'U1',U1, ...
-            'SYS_LOSS',SYS_LOSS, 'MODULE_REF',MODULE_REF, ...
-            'lat',37.477, 'lon',15.082, 'slope',35, 'azimuth',0, ...
-            'source',"PVGIS-SARAH3 hourly radiation");
-save('pv_generation.mat','pv');
-fprintf('Saved pv_generation.mat  (%d hours, %d years)\n', height(T), numel(yrs));
-
-%% ====================== 7.  PARSER  ===================================
+%% ====================== 3.  PARSER  ===================================
 function T = parsePVGIS(fname)
-% PVGIS writes metadata, then a header starting "time,", then data, then
-% more metadata.  Find the header rather than assuming a fixed offset.
+% PVGIS CSV is metadata lines, then a header row starting with "time,",
+% then the data, then more metadata.  Find the header rather than assuming
+% a fixed offset, and stop at the first line that is not a data row.
+
     L = readlines(fname);
     h = find(startsWith(strtrim(L), 'time,'), 1);
-    assert(~isempty(h), 'parsePVGIS: no "time," header row in %s', fname);
+    assert(~isempty(h), ...
+        ['parsePVGIS: no header row starting "time," in %s.\n' ...
+         'PVGIS may have changed its format - open the file and check.'], fname);
 
+    % data runs until the first line that does not start with 8 digits
     isData = ~cellfun(@isempty, regexp(strtrim(L(h+1:end)), '^\d{8}:', 'once'));
     nData  = find(~isData, 1) - 1;
     if isempty(nData), nData = numel(isData); end
     assert(nData > 0, 'parsePVGIS: header found but no data rows follow.');
 
-    C = split(strtrim(L(h+1 : h+nData)), ',');       % nData x 6 string array
-    T = table;
-    T.time  = datetime(C(:,1), 'InputFormat','yyyyMMdd:HHmm');
-    T.Gi    = double(C(:,2));
-    T.H_sun = double(C(:,3));
-    T.T2m   = double(C(:,4));
-    T.WS10m = double(C(:,5));
+    opts = detectImportOptions(fname, 'NumHeaderLines', h-1, ...
+                               'ReadVariableNames', true, 'Delimiter', ',');
+    opts.DataLines = [h+1, h+nData];
+    opts = setvartype(opts, opts.VariableNames(1), 'char');   % keep time as text
+    T = readtable(fname, opts);
 
-    % PVGIS stamps satellite observation time (e.g. :09 past) - floor to hour
-    T.time = dateshift(T.time, 'start', 'hour');
+    % yyyymmdd:HHMM -> datetime
+    T.(1) = datetime(string(T.(1)), 'InputFormat', 'yyyyMMdd:HHmm');
+    T.Properties.VariableNames{1} = 'time';
+
+    % PVGIS writes G(i) etc; MATLAB mangles the brackets.  Normalise.
+    v = T.Properties.VariableNames;
+    v = replace(v, {'G_i_','Gb_i_','Gd_i_','Gr_i_'}, {'Gi','Gbi','Gdi','Gri'});
+    T.Properties.VariableNames = v;
+
+    need = {'Gi','T2m','WS10m'};
+    miss = need(~ismember(need, T.Properties.VariableNames));
+    if ~isempty(miss)
+        warning('parsePVGIS:missing', ...
+            ['Expected column(s) %s not found. Got: %s\n' ...
+             'Check the tilt/azimuth were accepted - without them PVGIS\n' ...
+             'returns horizontal irradiance under a different name.'], ...
+            strjoin(miss,', '), strjoin(T.Properties.VariableNames,', '));
+    end
 end
