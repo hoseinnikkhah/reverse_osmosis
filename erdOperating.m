@@ -47,7 +47,7 @@ k_trains = 3;
 
 eta_motor = 0.96;          % motor efficiency
 eta_vfd   = 0.98;          % drive efficiency
-n_min     = 0.807;         % HP pump min speed = sqrt(pi_avg/shutoff)
+n_min     = 0.761;;         % HP pump min speed = sqrt(pi_avg/shutoff)
                            %   = sqrt(436/668.0) for this curve, from the
                            %   real max pi_avg = 43.79 bar.  Below it the
                            %   pump deadheads against osmotic pressure.
@@ -80,8 +80,8 @@ dP_pipe    = 0.5;          % [EST] bar, ERD and piping losses, booster leg
 % duty Q_p = 133.2 m3/h at 588 m.  R2: head 0.99919, efficiency 0.99863.
 PUMP_MODEL   = "Lowara e-MP100B/08, 50 Hz (8A)";
 CURVE_SOURCE = "DATASHEET";
-pH    = [-7.484891e-03, +5.836656e-01, +6.680355e+02];
-pEta  = [-2.456961e-05, +8.656122e-03, +5.653247e-02];
+pH    = [-8.327209e-03, +6.249027e-01, +7.526340e+02];
+pEta  = [-2.437356e-05, +8.576757e-03, +6.200092e-02];
 Q_FIT = [27 290];          % m3/h range the curve was digitised over.
                            % Matches the printed end of the 8A curve.
                            % Outside it a falling parabola returns negative
