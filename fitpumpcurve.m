@@ -22,8 +22,39 @@ fprintf('>>> running fitPumpCurve.m\n');
 %% ====================== 1.  THE DIGITISED DATA  =======================
 % ---- paste your two tables here ---------------------------------------
 PUMP_LABEL = 'e-MP150A/05  (curve <label>)';   % for the figure titles
-Q_DUTY     = 390.5;    % m3/h, your design flow  - checked against BEP
-H_DUTY     = 584;      % m,    your design head
+
+% ---- THE DUTY POINT IS NO LONGER HARD CODED --------------------------
+% It is derived from the same system-curve file the operating codes use,
+% so it can never drift out of step with the design again.
+%
+%   BRANCH = "NOERD"  ->  the HP pump passes the whole feed,  Q_f
+%   BRANCH = "ERD"    ->  the HP pump passes the permeate only, Q_p = R*Q_f
+%                         (the PX and booster carry Q_b)
+BRANCH   = "ERD";
+SYSFILE  = 'system_curve_Conv_7e_96v_R35.mat';
+k_trains = 3;              % must match the operating code
+mix_fac  = 1.0105;         % ERD only: osmotic rise from PX mixing (1 = off)
+
+S  = load(SYSFILE);
+dd = S.design;
+A_train_fit = dd.A_mem / k_trains;
+Q_f_fit = dd.J_design * A_train_fit / (dd.R_set*1000);
+Q_p_fit = dd.J_design * A_train_fit / 1000;
+
+if BRANCH == "ERD"
+    Q_DUTY = Q_p_fit;
+    H_DUTY = max(mix_fac*S.pi_avg + dd.J_design./S.A_T) * S.bar2m;
+else
+    Q_DUTY = Q_f_fit;
+    H_DUTY = max(S.pi_avg + dd.J_design./S.A_T) * S.bar2m;
+    mix_fac = 1;
+end
+
+fprintf('branch %s : duty  Q = %.1f m3/h,  H = %.0f m\n', BRANCH, Q_DUTY, H_DUTY);
+fprintf('  (per train, %d trains, A_train = %.0f m2, R = %.2f)\n', ...
+        k_trains, A_train_fit, dd.R_set);
+fprintf('  Q_f = %.1f   Q_p = %.1f   Q_b = %.1f  m3/h\n\n', ...
+        Q_f_fit, Q_p_fit, Q_f_fit-Q_p_fit);
 
 %           Q [m3/h]             H [m]
 QH = [      30.370370370370374	 687.4677003
@@ -96,7 +127,15 @@ else
     eta_bep = polyval(pEta, Q_bep);
     fprintf('pass  efficiency peaks at %.0f m3/h, eta_BEP = %.3f\n', Q_bep, eta_bep);
     if eta_bep < 0.55 || eta_bep > 0.92
-        fprintf('WARN  eta_BEP outside 0.55-0.92 - recheck the power digitisation\n');
+        fprintf('FAIL  eta_BEP = %.3f is outside 0.55-0.92.\n', eta_bep);
+        if eta_bep > 0.92
+            fprintf('      No pump this size reaches that.  eta = QH/(367P), so\n');
+            fprintf('      too-high eta means the POWER was read too low.  The\n');
+            fprintf('      usual cause is reading head and power from DIFFERENT\n');
+            fprintf('      labelled curves on the page - the panels carry one\n');
+            fprintf('      curve per stage count or impeller trim.  Confirm both\n');
+            fprintf('      tables came from the same label.\n');
+        end
         ok = false;
     end
     fprintf('      your duty %.0f m3/h is %.0f %% of BEP flow\n', ...
@@ -133,15 +172,18 @@ fprintf('------------------------------------------------\n');
 fprintf('shutoff head at nominal speed : %.0f m\n', pH(3));
 fprintf('if pi_avg is ~45 bar (447 m), the pump deadheads below\n');
 fprintf('n = sqrt(447/%.0f) = %.3f of nominal speed.\n', pH(3), sqrt(447/pH(3)));
-fprintf('Use that as n_min in pumpOperating.m if it exceeds the\n');
+fprintf('Use that as n_min if it exceeds the\n');
 fprintf('mechanical minimum from the datasheet.\n');
 fprintf('================================================\n\n');
 
 %% ====================== 5.  WHAT TO PASTE  ============================
-fprintf('Paste these two lines into pumpOperating.m:\n\n');
+if BRANCH == "ERD", tgt = 'erdOperating.m'; else, tgt = 'pumpOperating.m'; end
+fprintf('Paste these four lines into %s:\n\n', tgt);
 fprintf('CURVE_SOURCE = "DATASHEET";\n');
-fprintf('pH   = [%+.6e, %+.6e, %+.6e];\n', pH(1),   pH(2),   pH(3));
-fprintf('pEta = [%+.6e, %+.6e, %+.6e];\n\n', pEta(1), pEta(2), pEta(3));
+fprintf('pH    = [%+.6e, %+.6e, %+.6e];\n', pH(1),   pH(2),   pH(3));
+fprintf('pEta  = [%+.6e, %+.6e, %+.6e];\n', pEta(1), pEta(2), pEta(3));
+fprintf('Q_FIT = [%.0f %.0f];\n', min(Q), max(Q));
+fprintf('n_min = %.3f;\n\n', sqrt(447/pH(3)));
 if ~ok
     fprintf('*** CHECKS FAILED - fix the digitisation before using these ***\n\n');
 end
