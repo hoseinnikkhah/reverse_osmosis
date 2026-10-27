@@ -1,34 +1,3 @@
-%% pvDispatch.m
-%  Hour by hour, decide how many trains run and at what flux, given the PV
-%  power available that hour and the seawater conditions that day.
-%
-%  THE DECISION
-%    Each hour the plant may run m = 0..k_trains trains, all at a common
-%    commanded flux J.  The choice must satisfy
-%        m * Pel(J,d)  <=  P_available(h)        power constraint
-%        okSpd(J,d)                              the pump can hold that flux
-%    and among the feasible choices we take the one that makes the most
-%    permeate, m * Qp(J).
-%
-%  WHY THERE ARE GAPS
-%    m is an integer and J is bounded, so the plant can only absorb power in
-%    discrete windows.  Between them, PV power exists that the plant cannot
-%    use at any setting - it runs the lower configuration flat out and the
-%    rest is curtailed.  This is structural: no PV size removes it.
-%
-%  NO STORAGE
-%    PV only.  Power not used in the hour it is generated is lost.  This is
-%    what makes "renewable utilisation" and "curtailment" meaningful metrics.
-%
-%  TIME ALIGNMENT
-%    Solar and seawater records cover different calendar years, so they are
-%    joined by DAY-OF-YEAR: January seawater with January sun.  Individual
-%    weather events are uncorrelated between the datasets and carry no joint
-%    information, so matching them would be meaningless even if possible.
-%
-%  Inputs : pv_generation.mat, erd_operating_<tag>_k<k>.mat
-%  Output : pv_dispatch_<tag>.mat, a report, four figures
-
 clear; close all; clc;
 fprintf('>>> running pvDispatch.m\n');
 

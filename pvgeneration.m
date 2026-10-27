@@ -1,31 +1,3 @@
-%% pvGeneration.m
-%  Turn PVGIS hourly radiation files into an hourly AC power series.
-%
-%  WHY THIS IS NORMALISED PER kWp
-%    The DC power model is LINEAR in installed peak power:
-%        P_dc = P_peak * (G/1000) * [1 + gamma*(T_mod-25)]
-%    so this script computes p_unit, the AC power per kWp installed, once.
-%    The whole PV-capacity sweep is then P_ac = P_peak * p_unit - no
-%    re-download, no recomputation.  That is the axis of the capacity-ratio
-%    study, so it is worth having it cost nothing.
-%
-%  MODULE TEMPERATURE - Faiman (wind-dependent)
-%        T_mod = T_air + G / (U0 + U1*w)
-%    This is why WS10m was downloaded.  The simpler NOCT form ignores wind
-%    and overstates module temperature on breezy coastal sites, which is
-%    exactly where this plant is.
-%
-%  WHAT IS AND IS NOT INCLUDED
-%    Included : irradiance, module temperature, system losses (cabling,
-%               soiling, mismatch, INVERTER - PVGIS bundles these in its
-%               14 % default, so do NOT apply a separate inverter term).
-%    Excluded : spectral and incidence-angle effects, degradation, shading,
-%               low-light efficiency roll-off.  All second order for a
-%               plant whose startup threshold is ~265 kW; state the omission.
-%
-%  Inputs : one or more PVGIS "Timeseries_*.csv" hourly radiation files
-%  Output : pv_generation.mat  -  p_unit [kW_ac per kWp], time, year index
-
 clear; close all; clc;
 fprintf('>>> running pvGeneration.m\n');
 
