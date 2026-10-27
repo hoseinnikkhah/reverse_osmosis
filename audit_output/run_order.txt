@@ -1,0 +1,167 @@
+RUN ORDER  -  C:\Users\Hosein\Desktop\Catania\Research\reverse_osmosis
+==========================================================================================
+Stages run top to bottom.  Scripts inside one stage do not depend on each other
+and can run in any order.  'reads' names the stage that produced each input.
+
+RAW INPUTS (read, produced by no script - keep these in the repo)
+  cmems_mod_med_phy-sal_my_4.2km_P1D-m_1788964958643.nc   used by cordination_finder.py, salinity_data.m
+  cmems_mod_med_phy-temp_my_4.2km_P1D-m_1788964996647.nc  used by cordination_finder.py, temp_data.m
+  Timeseries_37.477_15.082_SA3_35deg_0deg_2020_2021.csv   used by pvgeneration.m
+  Timeseries_37.477_15.082_SA3_35deg_0deg_2021_2022.csv   used by pvgeneration.m
+
+STAGE 1
+------------------------------------------------------------------------------------------
+  A_B_finder.m
+      writes membrane_params.mat
+  cordination_finder.py   [end of chain - nothing reads its outputs]
+      reads  cmems_mod_med_phy-sal_my_4.2km_P1D-m_1788964958643.nc   <- raw input
+      reads  cmems_mod_med_phy-temp_my_4.2km_P1D-m_1788964996647.nc   <- raw input
+  flow_rate.m
+      writes design_data.mat
+  pvgeneration.m
+      reads  Timeseries_37.477_15.082_SA3_35deg_0deg_2020_2021.csv   <- raw input
+      reads  Timeseries_37.477_15.082_SA3_35deg_0deg_2021_2022.csv   <- raw input
+      writes pv_generation.mat
+  salinity_data.m
+      reads  cmems_mod_med_phy-sal_my_4.2km_P1D-m_1788964958643.nc   <- raw input
+      writes salinity_surface.mat
+  temp_data.m
+      reads  cmems_mod_med_phy-temp_my_4.2km_P1D-m_1788964996647.nc   <- raw input
+      writes temperature_surface.mat
+
+STAGE 2
+------------------------------------------------------------------------------------------
+  A_tempature_model.m
+      reads  membrane_params.mat   <- A_B_finder.m (stage 1)
+      writes A_temp_data.mat
+  osmotic_pressure.m
+      reads  salinity_surface.mat   <- salinity_data.m (stage 1)
+      reads  temperature_surface.mat   <- temp_data.m (stage 1)
+      writes osmotic_pressure.mat
+  recovery_flow_rate.m   [end of chain - nothing reads its outputs]
+      reads  design_data.mat   <- flow_rate.m (stage 1)
+      writes flow_data.mat
+  salinity_and_temp_mean.m
+      reads  salinity_surface.mat   <- salinity_data.m (stage 1)
+      reads  temperature_surface.mat   <- temp_data.m (stage 1)
+      writes salinity_and_temp_mean.mat
+
+STAGE 3
+------------------------------------------------------------------------------------------
+  brine_conc_new_osmotic_p.m
+      reads  salinity_and_temp_mean.mat   <- salinity_and_temp_mean.m (stage 2)
+      writes osmotic_pressure_recovery.mat
+  delta_P_finder.m
+      reads  A_temp_data.mat   <- A_tempature_model.m (stage 2)
+      reads  osmotic_pressure.mat   <- osmotic_pressure.m (stage 2)
+      reads  salinity_and_temp_mean.mat   <- salinity_and_temp_mean.m (stage 2)
+      writes delta_P_finder.mat
+  J_s_finder.m
+      reads  membrane_params.mat   <- A_B_finder.m (stage 1)
+      reads  salinity_and_temp_mean.mat   <- salinity_and_temp_mean.m (stage 2)
+      writes J_s_finder.mat
+
+STAGE 4
+------------------------------------------------------------------------------------------
+  C_p_finder.m
+      reads  J_s_finder.mat   <- J_s_finder.m (stage 3)
+      writes C_p_finder.mat
+  delta_P_avg_finder.m
+      reads  A_temp_data.mat   <- A_tempature_model.m (stage 2)
+      reads  salinity_and_temp_mean.mat   <- salinity_and_temp_mean.m (stage 2)
+      reads  osmotic_pressure_recovery.mat   <- brine_conc_new_osmotic_p.m (stage 3)
+      writes delta_P_avg.mat
+  design_map.m   [end of chain - nothing reads its outputs]
+      reads  design_data.mat   <- flow_rate.m (stage 1)
+      reads  A_temp_data.mat   <- A_tempature_model.m (stage 2)
+      reads  salinity_and_temp_mean.mat   <- salinity_and_temp_mean.m (stage 2)
+      reads  osmotic_pressure_recovery.mat   <- brine_conc_new_osmotic_p.m (stage 3)
+      writes design_map.csv, design_map.mat
+  flux_deltaP_figures.m   [end of chain - nothing reads its outputs]
+      reads  delta_P_finder.mat   <- delta_P_finder.m (stage 3)
+  pump_number.m
+      reads  design_data.mat   <- flow_rate.m (stage 1)
+      reads  A_temp_data.mat   <- A_tempature_model.m (stage 2)
+      reads  salinity_and_temp_mean.mat   <- salinity_and_temp_mean.m (stage 2)
+      reads  osmotic_pressure_recovery.mat   <- brine_conc_new_osmotic_p.m (stage 3)
+      writes train_staging.csv, train_staging.mat, train_staging_%dv.png, train_staging_coverage.png, train_staging_maxgap.png, train_staging_spec.csv
+  recovery_check.m   [end of chain - nothing reads its outputs]
+      reads  design_data.mat   <- flow_rate.m (stage 1)
+      reads  A_temp_data.mat   <- A_tempature_model.m (stage 2)
+      reads  salinity_and_temp_mean.mat   <- salinity_and_temp_mean.m (stage 2)
+      reads  osmotic_pressure_recovery.mat   <- brine_conc_new_osmotic_p.m (stage 3)
+      writes recovery_check.csv
+  run_all_designs.m
+      runs   systemCurve.m  (do not run it on its own)
+      reads  design_data.mat   <- flow_rate.m (stage 1)
+      reads  A_temp_data.mat   <- A_tempature_model.m (stage 2)
+      reads  salinity_and_temp_mean.mat   <- salinity_and_temp_mean.m (stage 2)
+      reads  osmotic_pressure_recovery.mat   <- brine_conc_new_osmotic_p.m (stage 3)
+      writes design_runs.csv, design_runs.mat, system_curve_%s_%de_%dv_R%02.0f.mat
+  rundesignset.m   [end of chain - nothing reads its outputs]
+      reads  design_data.mat   <- flow_rate.m (stage 1)
+      reads  A_temp_data.mat   <- A_tempature_model.m (stage 2)
+      reads  salinity_and_temp_mean.mat   <- salinity_and_temp_mean.m (stage 2)
+      reads  osmotic_pressure_recovery.mat   <- brine_conc_new_osmotic_p.m (stage 3)
+      writes pretreatment_comparison.csv
+
+STAGE 5
+------------------------------------------------------------------------------------------
+  C_p_plot.m   [end of chain - nothing reads its outputs]
+      reads  C_p_finder.mat   <- C_p_finder.m (stage 4)
+  feasibility_check.m   [end of chain - nothing reads its outputs]
+      reads  osmotic_pressure_recovery.mat   <- brine_conc_new_osmotic_p.m (stage 3)
+      reads  delta_P_avg.mat   <- delta_P_avg_finder.m (stage 4)
+      writes feasibility_checks.mat
+  fitpumpcurve.m
+      reads  (manual) train count k_trains set from the staging tables   <- pump_number.m (stage 4)
+      reads  system_curve_Conv_7e_96v_R35.mat   <- run_all_designs.m (stage 4)
+
+STAGE 6
+------------------------------------------------------------------------------------------
+  erdOperating.m
+      reads  system_curve_Conv_7e_96v_R35.mat   <- run_all_designs.m (stage 4)
+      reads  (manual) pump-curve coefficients pH, pEta copied by hand   <- fitpumpcurve.m (stage 5)
+      writes erd_operating_%s_k%d.mat
+  pump_oprating.m   [end of chain - nothing reads its outputs]
+      reads  system_curve_Conv_7e_96v_R35.mat   <- run_all_designs.m (stage 4)
+      reads  (manual) pump-curve coefficients pH, pEta copied by hand   <- fitpumpcurve.m (stage 5)
+      writes pump_operating_%s_k%d.mat
+
+STAGE 7
+------------------------------------------------------------------------------------------
+  pvdispatch.m
+      reads  pv_generation.mat   <- pvgeneration.m (stage 1)
+      reads  erd_operating_Conv_7e_96v_R35_k3.mat   <- erdOperating.m (stage 6)
+      writes pv_dispatch_%s_%d.mat
+
+STAGE 8
+------------------------------------------------------------------------------------------
+  LCOW_Economics.m
+      reads  pv_generation.mat   <- pvgeneration.m (stage 1)
+      reads  erd_operating_Conv_7e_96v_R35_k3.mat   <- erdOperating.m (stage 6)
+      reads  pv_dispatch_Conv_7e_96v_R35_k3_2021.mat   <- pvdispatch.m (stage 7)
+      writes lcow_%s.mat, lcow_parameters.csv
+
+STAGE 9
+------------------------------------------------------------------------------------------
+  Optimize_Design.m   [end of chain - nothing reads its outputs]
+      reads  pv_generation.mat   <- pvgeneration.m (stage 1)
+      reads  erd_operating_Conv_7e_96v_R35_k3.mat   <- erdOperating.m (stage 6)
+      reads  lcow_Conv_7e_96v_R35_k3.mat   <- LCOW_Economics.m (stage 8)
+      writes optimize_%s.mat, optimize_grid_%s.csv
+
+NOT LINKED TO ANY OTHER SCRIPT (no shared files, not called) - run any time, or unused
+  ciel_recovery.m
+  vessel_rate.m
+
+RUN BY OTHER SCRIPTS (not separate steps)
+  systemCurve.m                       run by run_all_designs.m
+
+MANUAL HAND-OFFS ADDED (not visible in the files)
+  pump_number.m -> fitpumpcurve.m : train count k_trains set from the staging tables
+  fitpumpcurve.m -> erdOperating.m : pump-curve coefficients pH, pEta copied by hand
+  fitpumpcurve.m -> pump_oprating.m : pump-curve coefficients pH, pEta copied by hand
+
+Limits: file names built at run time from variables that are not string literals,
+and hand-offs not listed in MANUAL_EDGES, cannot be seen by a static scan.
