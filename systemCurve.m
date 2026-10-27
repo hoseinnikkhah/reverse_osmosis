@@ -1,22 +1,3 @@
-%% systemCurve.m
-%  System curve for ONE PV-SWRO design point.
-%
-%  Run it directly to study one design interactively, or let
-%  run_all_designs.m drive it in batch over a whole design list.
-%
-%  dP(J,t) = pi_avg(R,t) + J / A(T(t))                             [bar]
-%  Q_f(J)  = J * A_mem * (24/1000) / R                             [m3/d]
-%
-%  dP carries no pretreatment term and no membrane-area term: it is set by
-%  recovery, seawater salinity and seawater temperature alone.  The
-%  pretreatment configuration fixes WHERE on that curve the plant may sit
-%  (design flux band) and HOW FAR the curve extends (max element flux).
-%  The vessel/element count rescales the Q_f axis only, through A_mem.
-%
-%  Inputs : design_data.mat, osmotic_pressure_recovery.mat,
-%           A_temp_data.mat, salinity_and_temp_mean.mat
-%  Output : system_curve_<config>_<e>e_<v>v_R<rr>.mat   (+ two figures)
-
 %% ====================== 1.  DESIGN SELECTION  ==========================
 if exist('BATCH_MODE','var') && BATCH_MODE
     % Driven by run_all_designs.m, which supplies cfg_name, n_elem,

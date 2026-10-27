@@ -1,16 +1,4 @@
-%% compare_pretreatment.m
-%  Compare the four pretreatment configurations of the design guide on ONE
-%  system curve.
-%
-%  The system curve dP(J,t) = pi_avg(R,t) + J/A(T(t)) contains no
-%  pretreatment term, so the four configurations do NOT have four different
-%  curves.  They share one curve and differ only in:
-%     - where they are allowed to sit on it   (design flux band)
-%     - how far along it they may go          (max element flux)
-%     - the staging ceiling on recovery       (max element recovery)
-%  The envelope is therefore drawn ONCE and the four configurations are
-%  marked on it.  Overlaying four identical curves hides three of them.
-% not needed
+
 clear; close all; clc;
 
 %% ---- fixed hardware and operating point ------------------------------

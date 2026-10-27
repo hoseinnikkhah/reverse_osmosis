@@ -1,14 +1,3 @@
-%% run_all_designs.m
-%  Drive systemCurve.m over a whole design list and keep every result.
-%
-%  systemCurve.m saves one .mat per design, named
-%     system_curve_<config>_<e>e_<v>v_R<rr>.mat
-%  so nothing is overwritten.  The pump / PV layer later loads whichever
-%  design it needs by that name, or reads the summary table written here.
-%
-%  Figures are suppressed in batch.  To study one design in detail, run
-%  systemCurve.m on its own with that design in its edit block.
-
 clear; close all; clc;
 fprintf('>>> running run_all_designs.m  (batch over the design list)\n\n');
 

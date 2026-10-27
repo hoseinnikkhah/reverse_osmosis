@@ -1,20 +1,3 @@
-%% fitPumpCurve.m
-%  Turn digitised manufacturer curves into the two coefficient vectors that
-%  pumpOperating.m needs, with sanity checks and a visual fit check.
-%
-%  INPUT   two tables read off the catalogue chart for ONE labelled curve:
-%            QH : flow [m3/h]  and head [m]        (top panel)
-%            QP : flow [m3/h]  and shaft power [kW] (bottom panel)
-%
-%  EFFICIENCY is not published on this catalogue, so it is computed:
-%            eta = rho*g*Q*H / P  =  Q*H / (367*P)
-%  with Q in m3/h, H in m, P in kW.  The 367 = 3600/9.81 assumes
-%  rho = 1000 kg/m3, which is what the catalogue footnote states the
-%  curves are valid for.  DO NOT substitute seawater density here -
-%  pumpOperating.m applies rho = 1025 when it computes power, and
-%  efficiency is a ratio so density cancels out of it entirely.
-%
-%  OUTPUT  pH and pEta printed ready to paste, plus two check figures.
 
 clear; close all; clc;
 fprintf('>>> running fitPumpCurve.m\n');

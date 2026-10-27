@@ -1,31 +1,3 @@
-%% recovery_check.m
-%  Justify the choice of system recovery, from the stored data.
-%
-%  Recovery sets two things that pull in opposite directions:
-%
-%  COST OF LOW RECOVERY - energy
-%      SEC_hyd = 0.027778 * dP / R
-%      Raising R puts more in the denominator than it adds to dP, so
-%      specific energy FALLS as recovery rises.  Low recovery is expensive.
-%
-%  COST OF HIGH RECOVERY - operating range
-%      Concentration at the brine end goes as C_f/(1-R) while the average
-%      only goes as C_f(2-R)/2(1-R).  The gap is the minimum flux that
-%      still produces permeate:
-%          J_min(T) = A(T) * [pi(C_b) - pi(C_avg)]
-%                   = A(T) * pi(C_f) * R / (2(1-R))
-%      That factor is 0.269 at R = 0.35 and 0.500 at R = 0.50.  Once J_min
-%      climbs past the bottom of the design flux band, the plant loses
-%      turndown; once it passes the top, the configuration cannot run at
-%      all on the worst day.
-%
-%  This script computes both across the stored recovery grid, for all four
-%  pretreatment configurations, and reports the usable band width.
-%
-%  Inputs : design_data.mat, osmotic_pressure_recovery.mat,
-%           A_temp_data.mat, salinity_and_temp_mean.mat
-%  Output : recovery_check.csv  (+ two figures)
-
 clear; close all; clc;
 fprintf('>>> running recovery_check.m\n');
 
