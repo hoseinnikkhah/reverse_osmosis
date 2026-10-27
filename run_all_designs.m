@@ -32,7 +32,7 @@ DESIGNS = { ...
     "UF + B-free"                 , 7, 120 ; ...
     "UF + B-free"                 , 7, 150 };
 
-R_SET  = 0.45;        % system recovery for the whole batch
+R_SET  = 0.35;        % system recovery for the whole batch
 J_FIX  = [];          % [] = band midpoint per configuration (recommended)
 % -----------------------------------------------------------------------
 
