@@ -59,7 +59,7 @@ DISPFILES = {'pv_dispatch_Conv_7e_96v_R35_k3_2021.mat'};
 
 CAPEX_METHOD = "topdown";    % "topdown"  : specific cost x design capacity
                              % "bottomup" : Lu et al. 2007 RO island / f_island
-OPEX_METHOD  = "lumped";     % "lumped"   : one variable CUR/m3 (Janowitz)
+OPEX_METHOD  = "explicit";     % "lumped"   : one variable CUR/m3 (Janowitz)
                              % "explicit" : chemicals + membranes + other
 
 CURRENCY  = "EUR";           % "EUR" or "USD"
