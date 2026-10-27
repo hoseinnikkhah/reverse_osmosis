@@ -65,8 +65,13 @@ A_SCALE = 1.0;     % SWRO CAPEX ~ capacity^A_SCALE.  1 = linear, no economy
 % -----------------------------------------------------------------------
 
 %% ====================== 2.  LOAD  =====================================
-L = load(LCOWFILE, 'p', 'C_RO', 'Cap', 'COST_YEAR', 'OPEX_METHOD');
-p = L.p;
+L = load(LCOWFILE);
+assert(isfield(L, 'CURRENCY'), ['optimizeDesign: %s has no cost basis - rerun the ' ...
+       'current lcowEconomics.m'], LCOWFILE);
+p   = L.p;                                      % money in CUR of L.COST_YEAR
+CUR = char(L.CURRENCY);
+SYM = char(8364);  if strcmp(CUR,'USD'), SYM = '$'; end
+lblL = sprintf('LCOW  (%s_{%d}/m^3)', SYM, L.COST_YEAR);
 
 nF = numel(ERDFILES);
 tr = struct('J',[],'R',[],'Qp',[],'Pel',[],'ok',[],'isDesign',[]);
@@ -95,7 +100,7 @@ kb     = double(E1.k_trains);
 nEl_tr = double(E1.d.n_elem) * double(E1.d.n_vess) / kb;
 Cap_tr = interp1(double(E1.Jset(:)), double(E1.Qp_set(:)), double(E1.d.J_design)) * 24;
 Cap_k  = K_SET * Cap_tr;                                  % m3/d
-C_RO_k = L.C_RO * (Cap_k / L.Cap) .^ A_SCALE;             % USD
+C_RO_k = L.C_RO * (Cap_k / L.Cap) .^ A_SCALE;             % CUR
 nEl_k  = K_SET * nEl_tr;
 
 V  = load(PVFILE);  pv = V.pv;
@@ -212,8 +217,10 @@ end
 
 %% ====================== 7.  REPORT  ===================================
 sep = repmat('=',1,82);  dash = repmat('-',1,82);
-fprintf('\n%s\nOPTIMISATION, solar year %d, costs USD %d, OPEX %s, A_SCALE = %.2f\n%s\n', ...
-        sep, BASE_YEAR, L.COST_YEAR, L.OPEX_METHOD, A_SCALE, dash);
+fprintf('\n%s\nOPTIMISATION, solar year %d, money in %s %d, OPEX %s, A_SCALE = %.2f\n%s\n', ...
+        sep, BASE_YEAR, CUR, L.COST_YEAR, L.OPEX_METHOD, A_SCALE, dash);
+fprintf('LCOW in %s/m3 (%s %d);  capacity m3/d;  water m3/yr;  SEC kWh/m3;  PV kWp\n', ...
+        CUR, CUR, L.COST_YEAR);
 fprintf('train : %d vessels x %d elements, %.0f m3/d design;  recovery set(s): %s\n', ...
         double(E1.d.n_vess)/kb, double(E1.d.n_elem), Cap_tr, mat2str(unique(tr.R)'));
 
@@ -257,7 +264,7 @@ fprintf('\n[4] robustness at k = %d\n', kb);
 for y = 1:nYr
     Ly3 = reshape(LY(y,ik3,:), 1, nP);
     [Lm, ip] = min(Ly3);
-    fprintf('   solar %d : best P %5d kWp, LCOW %.3f USD/m3\n', YEARS(y), P_GRID(ip), Lm);
+    fprintf('   solar %d : best P %5d kWp, LCOW %.3f %s/m3\n', YEARS(y), P_GRID(ip), Lm, CUR);
 end
 
 fprintf('\n[5] Pareto front, LCOW vs PV utilisation: %d non-dominated designs\n', nnz(nd));
@@ -274,14 +281,14 @@ Lmin = min(Lb(:));
 figure('Name','opt 1/6 - LCOW design map','Color','w','Position',[40 420 820 500]);
 Lc = Lb;  Lc(~isfinite(Lc)) = NaN;  Lc = min(Lc, 2*Lmin);
 contourf(P_GRID, K_SET, Lc, 24, 'LineColor', 'none');  hold on;
-cb = colorbar;  cb.Label.String = sprintf('LCOW  (USD_{%d}/m^3), capped at 2x min', L.COST_YEAR);
+cb = colorbar;  cb.Label.String = [lblL ', capped at 2x min'];
 lev = DEMAND;  if numel(lev) == 1, lev = [lev lev]; end
 [cc, hc] = contour(P_GRID, K_SET, Wb, lev, 'w--', 'LineWidth', 1.1);
 clabel(cc, hc, 'Color', 'w', 'FontSize', 8);
 h2 = plot(PoptK, K_SET, 'k-o', 'LineWidth', 1.6, 'MarkerFaceColor', 'k');
 h3 = plot([Dopt.P], [Dopt.k], 'p', 'MarkerSize', 13, 'MarkerFaceColor', 'y', 'MarkerEdgeColor', 'k');
 xlabel('installed PV capacity  (kWp)');  ylabel('SWRO trains  k');  yticks(K_SET);
-legend([hc h2 h3], {'annual permeate (m^3)', 'best P for each k', 'demand-driven optimum'}, ...
+legend([hc h2 h3], {'annual permeate (m^3/yr)', 'best P for each k', 'demand-driven optimum'}, ...
        'Location', 'southeast', 'Box', 'off');
 title('LCOW over PV and SWRO capacity');
 
@@ -301,7 +308,7 @@ for ik = 1:nK
 end
 [us2, o2] = sort(100*us);  xs2 = xs(o2);
 plot(us2, xs2, 'k-', 'LineWidth', 1.8);
-xlabel('PV utilisation  (%)');  ylabel(sprintf('LCOW  (USD_{%d}/m^3)', L.COST_YEAR));
+xlabel('PV utilisation  (%)');  ylabel(lblL);
 legend([arrayfun(@(k) sprintf('k = %d', k), K_SET, 'uni', 0), {'Pareto front'}], ...
        'Location', 'northwest', 'Box', 'off');
 title('Cheapest water and best use of PV are not the same design');
@@ -313,7 +320,7 @@ for ik = 1:nK
 end
 ylim([0.95*Lmin 2*Lmin]);
 xlabel('PV / SWRO ratio  (kWp per m^3/h of capacity)');
-ylabel(sprintf('LCOW  (USD_{%d}/m^3)', L.COST_YEAR));
+ylabel(lblL);
 legend(arrayfun(@(k) sprintf('k = %d', k), K_SET, 'uni', 0), 'Location', 'northeast', 'Box', 'off');
 title('Curves collapse: the ratio, not the size, sets LCOW');
 
@@ -322,7 +329,7 @@ subplot(2,1,1);  hold on;  grid on;  box on;
 for s = 1:nS
     plot(P_GRID, reshape(G.LCOW(s,ik3,:), 1, nP), '-', 'LineWidth', 1.6);
 end
-ylim([0.95*Lmin 2*Lmin]);  ylabel('LCOW  (USD/m^3)');
+ylim([0.95*Lmin 2*Lmin]);  ylabel(lblL);
 legend({STRAT.name}, 'Location', 'northeast', 'Box', 'off');
 title(sprintf('Operating strategy, k = %d', kb));
 subplot(2,1,2);  hold on;  grid on;  box on;
@@ -337,7 +344,7 @@ for y = 1:nYr
     plot(P_GRID, reshape(LY(y,ik3,:), 1, nP), '-', 'LineWidth', 1.6);
 end
 ylim([0.95*Lmin 2*Lmin]);
-xlabel('installed PV capacity  (kWp)');  ylabel('LCOW  (USD/m^3)');
+xlabel('installed PV capacity  (kWp)');  ylabel(lblL);
 legend(arrayfun(@(v) sprintf('solar %d', v), YEARS, 'uni', 0), 'Location', 'northeast', 'Box', 'off');
 title(sprintf('Inter-annual spread, k = %d', kb));
 
@@ -414,7 +421,8 @@ function out = keepLongRuns(mask, T)
 end
 
 function [LCOW, total] = lcowDesign(p, P, Cap, C_RO, nEl, S, pu_max, opexMode)
-%  Qudah et al. 2025 Eq. 4 without wind and storage terms.  USD/m3, USD/yr.
+%  Qudah et al. 2025 Eq. 4 without wind and storage terms.  CUR/m3, CUR/yr;
+%  every money value in p is already in the cost basis.
     a     = p.i*(1+p.i)^p.N / ((1+p.i)^p.N - 1);
     P_ac  = pu_max * P;
     pvRep = sum((1+p.i).^(-(p.L_inv : p.L_inv : p.N-1)));
@@ -425,7 +433,7 @@ function [LCOW, total] = lcowDesign(p, P, Cap, C_RO, nEl, S, pu_max, opexMode)
         total = total + p.c_var*S.water;
     else
         total = total + p.c_var_other*S.water + p.c_chem*S.feed ...
-              + p.mem_rate*nEl*p.c_element_07*p.CEPCI_base/p.CEPCI_2007;
+              + p.mem_rate*nEl*p.c_element;
     end
     if S.water > 0
         LCOW = total / S.water;

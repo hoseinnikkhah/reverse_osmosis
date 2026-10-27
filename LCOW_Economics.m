@@ -20,12 +20,27 @@
 %     running cost - it is paid for through C_PV - so SEC acts on LCOW only
 %     through sum Q_P (water per kWh) and through the PV size.
 %
+%  ONE COST BASIS
+%     Every money parameter carries its own currency and cost year, exactly
+%     as published.  Each is converted to CURRENCY of COST_YEAR by
+%         value x CEPCI(COST_YEAR)/CEPCI(cost year)      escalation
+%               x 1/FX(COST_YEAR)                        USD -> EUR
+%     i.e. escalate in the source currency, then convert at the cost-basis
+%     year's average rate.  The conversion is printed and written to
+%     lcow_parameters.csv so every number in the paper can be traced.
+%     Constant (real) prices over the plant life, CAPEX paid at t = 0.
+%
+%  UNITS used everywhere below
+%     money            CUR  (= CURRENCY of COST_YEAR)
+%     water            m3, flows m3/h, capacity m3/d, production m3/yr
+%     PV               kWp (DC, installed) ; inverter kW_ac
+%     energy, power    kWh, kW ;  SEC kWh/m3
+%     annual costs     CUR/yr ;  LCOW CUR/m3
+%
 %  PROVENANCE TAGS  (same convention as erdOperating.m)
 %     [LIT]  taken from a cited paper.  A '->' in the source names the
 %            primary source that should replace it before publication.
 %     [PH]   placeholder, no value yet.  Only needed by the optional modes.
-%  Money in USD of COST_YEAR, constant (real) prices, no escalation over
-%  the plant life, CAPEX paid up front at t = 0.
 %
 %  Inputs : erd_operating_<tag>_k<k>.mat, pv_dispatch_<tag>_<year>.mat,
 %           pv_generation.mat
@@ -44,40 +59,70 @@ DISPFILES = {'pv_dispatch_Conv_7e_96v_R35_k3_2021.mat'};
 
 CAPEX_METHOD = "topdown";    % "topdown"  : specific cost x design capacity
                              % "bottomup" : Lu et al. 2007 RO island / f_island
-OPEX_METHOD  = "lumped";     % "lumped"   : one variable USD/m3 (Janowitz)
+OPEX_METHOD  = "lumped";     % "lumped"   : one variable CUR/m3 (Janowitz)
                              % "explicit" : chemicals + membranes + other
-COST_YEAR = 2022;
-SENS_FRAC = 0.30;            % +/- range on cost items in the tornado
-I_RANGE   = [0.02 0.07];     % discount-rate range, as Janowitz 2025
 
-%  name            value    unit               tag    source
+CURRENCY  = "EUR";           % "EUR" or "USD"
+COST_YEAR = 2022;            % cost basis.  2022 needs no escalation for the
+                             % Janowitz values; change once IRENA is in.
+SENS_FRAC = 0.30;            % +/- range on cost items in the tornado
+I_RANGE   = [0.02 0.07];     % real discount-rate range, as Janowitz 2025
+
+% Chemical Engineering Plant Cost Index, annual average (verify each value)
+CEPCI = [ 2007  525.4
+          2022  816.0
+          2023  797.9 ];
+% ECB euro reference rate, annual average, USD per 1 EUR (verify each value)
+FX_USD_PER_EUR = [ 2022  1.0530
+                   2023  1.0813
+                   2024  1.0824 ];
+
+%  'CUR' in a unit is the parameter's own currency (column 4).
+%  name           value   unit                cur    cost yr  tag    source
 PAR = {
- 'i'               0.06     '1/yr'             'LIT'  'Qudah et al. 2025 Sec. 4.2'
- 'N'               25       'yr'               'LIT'  'Qudah 2025 Sec. 4.2; Janowitz et al. 2025 Table 2'
- 'c_RO_spec'       1037     'USD/(m3/d)'       'LIT'  'Janowitz 2025 Table 2 -> Voutchkov 2018; Caldera & Breyer 2017'
- 'f_island'        NaN      '-'                'PH'   'RO-island share of total SWRO CAPEX -> Voutchkov 2018 (bottomup only)'
- 'c_element_07'    1200     'USD(2007)/elem'   'LIT'  'Lu et al. 2007 Table 1 -> current DuPont quote'
- 'c_vessel_07'     1000     'USD(2007)/vessel' 'LIT'  'Lu et al. 2007 Table 2'
- 'k_invest'        1.411    '-'                'LIT'  'Lu et al. 2007 Eq. 41'
- 'CEPCI_2007'      525.4    '-'                'LIT'  'Chemical Engineering CEPCI annual 2007 (verify)'
- 'CEPCI_base'      816.0    '-'                'LIT'  'Chemical Engineering CEPCI annual 2022 (verify)'
- 'om_fix_plant'    0.03     '1/yr of C_RO'     'LIT'  'Janowitz 2025 Table 2 -> Voutchkov 2018'
- 'om_fix_infra'    0.01     '1/yr of C_RO'     'LIT'  'Janowitz 2025 Table 2 -> Voutchkov 2018'
- 'c_labour'        0.04     'USD/m3 design'    'LIT'  'Janowitz 2025 Table 2 -> Voutchkov 2018'
- 'c_var'           0.10     'USD/m3 produced'  'LIT'  'Janowitz 2025 Table 2 (chem, membranes, cartridges, disposal) -> Voutchkov 2018'
- 'c_chem'          NaN      'USD/m3 feed'      'PH'   'Voutchkov 2018; doses DuPont FilmTec manual (explicit only)'
- 'c_var_other'     NaN      'USD/m3 produced'  'PH'   'Voutchkov 2018: cartridges, disposal (explicit only)'
- 'mem_rate'        0.10     '1/yr'             'LIT'  'Cervantes-Rendon et al. 2022 -> DuPont FilmTec manual (explicit only)'
- 'c_PV'            820      'USD/kWp'          'LIT'  'Janowitz 2025 Table 3 (NREL Q1-2022, US tracking) -> IRENA RPGC 2024, Italy'
- 'om_PV'           16.42    'USD/kWp/yr'       'LIT'  'Janowitz 2025 Table 3 -> IRENA RPGC 2024'
- 'c_inv'           0        'USD/kW_ac'        'LIT'  'inside installed PV cost (IRENA balance of system)'
- 'c_inv_rep'       650      'USD/kW_ac'        'LIT'  'Qudah 2025 Sec. 3.3 (small-scale, high) -> IRENA / NREL utility inverter'
- 'L_inv'           15       'yr'               'LIT'  'Qudah 2025 Sec. 3.3'
+ 'i'              0.06    '1/yr'              '-'    NaN      'LIT'  'Qudah et al. 2025 Sec. 4.2'
+ 'N'              25      'yr'                '-'    NaN      'LIT'  'Qudah 2025 Sec. 4.2; Janowitz et al. 2025 Table 2'
+ 'c_RO_spec'      1037    'CUR/(m3/d)'        'USD'  2022     'LIT'  'Janowitz 2025 Table 2 (cost year not stated, taken as their PV basis 2022) -> Voutchkov 2018; Caldera & Breyer 2017'
+ 'f_island'       NaN     '-'                 '-'    NaN      'PH'   'RO-island share of total SWRO CAPEX -> Voutchkov 2018 (bottomup only)'
+ 'c_element'      1200    'CUR/element'       'USD'  2007     'LIT'  'Lu et al. 2007 Table 1 -> current DuPont quote'
+ 'c_vessel'       1000    'CUR/vessel'        'USD'  2007     'LIT'  'Lu et al. 2007 Table 2'
+ 'k_invest'       1.411   '-'                 '-'    NaN      'LIT'  'Lu et al. 2007 Eq. 41'
+ 'om_fix_plant'   0.03    '1/yr of C_RO'      '-'    NaN      'LIT'  'Janowitz 2025 Table 2 -> Voutchkov 2018'
+ 'om_fix_infra'   0.01    '1/yr of C_RO'      '-'    NaN      'LIT'  'Janowitz 2025 Table 2 -> Voutchkov 2018'
+ 'c_labour'       0.04    'CUR/(m3/d)/d'      'USD'  2022     'LIT'  'Janowitz 2025 Table 2 (0.04 per m3 of design capacity per day) -> Voutchkov 2018'
+ 'c_var'          0.10    'CUR/m3 produced'   'USD'  2022     'LIT'  'Janowitz 2025 Table 2 (chem, membranes, cartridges, disposal) -> Voutchkov 2018'
+ 'c_chem'         NaN     'CUR/m3 feed'       'USD'  2018     'PH'   'Voutchkov 2018; doses DuPont FilmTec manual (explicit only)'
+ 'c_var_other'    NaN     'CUR/m3 produced'   'USD'  2018     'PH'   'Voutchkov 2018: cartridges, disposal (explicit only)'
+ 'mem_rate'       0.10    '1/yr'              '-'    NaN      'LIT'  'Cervantes-Rendon et al. 2022 -> DuPont FilmTec manual (explicit only)'
+ 'c_PV'           820     'CUR/kWp'           'USD'  2022     'LIT'  'Janowitz 2025 Table 3 (NREL Q1-2022, US tracking) -> IRENA RPGC 2024, Italy'
+ 'om_PV'          16.42   'CUR/kWp/yr'        'USD'  2022     'LIT'  'Janowitz 2025 Table 3 -> IRENA RPGC 2024'
+ 'c_inv'          0       'CUR/kW_ac'         'USD'  2022     'LIT'  'inside installed PV cost (IRENA balance of system)'
+ 'c_inv_rep'      650     'CUR/kW_ac'         'USD'  2023     'LIT'  'Qudah 2025 Sec. 3.3 (small-scale, high) -> IRENA / NREL utility inverter'
+ 'L_inv'          15      'yr'                '-'    NaN      'LIT'  'Qudah 2025 Sec. 3.3'
  };
 % -----------------------------------------------------------------------
 
-Ptab = cell2table(PAR, 'VariableNames', {'name','value','unit','tag','source'});
-p    = cell2struct(PAR(:,2), PAR(:,1), 1);
+CUR = char(CURRENCY);
+assert(any(strcmp(CUR, {'EUR','USD'})), 'lcowEconomics: CURRENCY must be "EUR" or "USD"');
+SYM = char(8364);  if strcmp(CUR,'USD'), SYM = '$'; end
+
+Ptab = cell2table(PAR, 'VariableNames', ...
+       {'name','value','unit','currency','cost_year','tag','source'});
+nPar  = height(Ptab);
+money = ismember(Ptab.currency, {'USD','EUR'});
+fac   = ones(nPar,1);
+for r = find(money & ~isnan(Ptab.value))'
+    fac(r) = costFactor(Ptab.currency{r}, Ptab.cost_year(r), CUR, COST_YEAR, CEPCI, FX_USD_PER_EUR);
+end
+fac(money & isnan(Ptab.value)) = NaN;                       % placeholders: nothing to convert
+tmpl             = Ptab.unit;
+Ptab.unit        = cellfun(@(u,c) strrep(u,'CUR',c), tmpl, Ptab.currency, 'uni', 0);
+Ptab.unit_basis  = cellfun(@(u) strrep(u,'CUR',CUR), tmpl, 'uni', 0);
+Ptab.factor      = fac;
+Ptab.value_basis = Ptab.value .* fac;
+p = cell2struct(num2cell(Ptab.value_basis), Ptab.name, 1);   % every money value in CUR of COST_YEAR
+
+fLu = costFactor('USD', 2007, CUR, COST_YEAR, CEPCI, FX_USD_PER_EUR);   % Lu cost correlations
 
 %% ====================== 2.  LOAD  =====================================
 E = load(ERDFILE);
@@ -112,17 +157,17 @@ Qbmax = max(E.Qb_set(Jok));                 % m3/h, PX flow
 dPmax = 1027 * 9.81 * Hmax / 1e5;           % bar, seawater 1027 kg/m3
 pu_max = max(V.pv.p_unit);                  % kW_ac per kWp, all solar years
 
-%% ============ 4.  SWRO CAPITAL  =======================================
-esc   = p.CEPCI_base / p.CEPCI_2007;
+%% ============ 4.  SWRO CAPITAL  (CUR)  ================================
 C_top = p.c_RO_spec * Cap;
 
-% Lu et al. 2007 Eqs 41-45.  Units read as bar x m3/h: with Lu's MPa the
-% HP pump for ~600 kW hydraulic would cost ~80 kUSD, which is implausible;
-% bar gives ~0.35 MUSD (2007).  Verify against Malek et al. 1996.
-CC_hpp = 52 * (dPmax * Qhpp)^0.96;
-CC_px  = 3134.7 * Qbmax^0.58;
-C_mem  = nEl * p.c_element_07 + nVess * p.c_vessel_07;
-C_isl  = (kt * (CC_hpp + CC_px) + C_mem) * p.k_invest * esc;   % RO island only
+% Lu et al. 2007 Eqs 41-45, USD 2007, converted with fLu.  Units read as
+% bar x m3/h: with Lu's MPa the HP pump for ~600 kW hydraulic would cost
+% ~80 kUSD, which is implausible; bar gives ~0.35 MUSD.  Verify against
+% Malek et al. 1996.
+CC_hpp = 52 * (dPmax * Qhpp)^0.96 * fLu;
+CC_px  = 3134.7 * Qbmax^0.58 * fLu;
+C_mem  = nEl * p.c_element + nVess * p.c_vessel;
+C_isl  = (kt * (CC_hpp + CC_px) + C_mem) * p.k_invest;      % RO island only
 
 switch CAPEX_METHOD
     case "topdown"
@@ -145,11 +190,11 @@ end
 Y = struct('year', num2cell(yrs));
 for y = 1:nY
     r = DS{y}.res;
-    W = double([r.water]');
+    W = double([r.water]');                 % m3/yr
     Y(y).W    = W;
     Y(y).util = double([r.util]');
-    Y(y).SEC  = double([r.SEC]');
-    Y(y).c    = lcowCore(p, Pk, W, C_RO, Cap, R, nEl, esc, pu_max, OPEX_METHOD);
+    Y(y).SEC  = double([r.SEC]');           % kWh/m3
+    Y(y).c    = lcowCore(p, Pk, W, C_RO, Cap, R, nEl, pu_max, OPEX_METHOD);
 end
 c = Y(1).c;   W = Y(1).W;
 [LCOWmin, iOpt] = min(c.LCOW);
@@ -182,50 +227,64 @@ for s = 1:nS
             otherwise
                 q.(sens{s,2}) = p.(sens{s,2}) * f;
         end
-        cc = lcowCore(q, Pk(iOpt), W(iOpt), CR, Cap, R, nEl, esc, pu_max, OPEX_METHOD);
+        cc = lcowCore(q, Pk(iOpt), W(iOpt), CR, Cap, R, nEl, pu_max, OPEX_METHOD);
         Lr(s,e) = cc.LCOW;
     end
 end
 
 %% ====================== 7.  REPORT  ===================================
-sep  = repmat('=',1,78);  dash = repmat('-',1,78);
-fprintf('\n%s\nLCOW, USD %d, CAPEX %s, OPEX %s\n%s\n', sep, COST_YEAR, ...
+B   = sprintf('%s %d', CUR, COST_YEAR);            % cost-basis label
+sep = repmat('=',1,86);  dash = repmat('-',1,86);
+fprintf('\n%s\nLCOW  -  all money in %s,  CAPEX %s,  OPEX %s\n%s\n', sep, B, ...
         CAPEX_METHOD, OPEX_METHOD, dash);
+
+fprintf('cost basis conversion (escalate with CEPCI, then convert at the %d rate):\n', COST_YEAR);
+fprintf('  %-13s %10s %-18s %6s %8s %12s %-18s\n', 'parameter', 'published', 'unit', 'year', ...
+        'factor', 'basis', 'unit');
+for r = find(ismember(Ptab.currency, {'USD','EUR'}))'
+    fprintf('  %-13s %10.4g %-18s %6d %8.4f %12.4g %-18s\n', Ptab.name{r}, Ptab.value(r), ...
+            Ptab.unit{r}, Ptab.cost_year(r), Ptab.factor(r), Ptab.value_basis(r), Ptab.unit_basis{r});
+end
+fprintf('  Lu et al. 2007 pump / PX correlations : factor %.4f (USD 2007 -> %s)\n', fLu, B);
+fprintf('%s\n', dash);
+
 fprintf('plant : %d x %d vessels, R = %.0f %%, %d trains, design flux %.1f LMH\n', ...
         double(E.d.n_elem), nVess, 100*R, kt, double(E.d.J_design));
-fprintf('design capacity          : %8.0f m3/d\n', Cap);
-fprintf('CRF (i = %.1f %%, N = %d) : %8.4f\n', 100*p.i, p.N, ...
+fprintf('design capacity            : %10.0f m3/d\n', Cap);
+fprintf('CRF (i = %.1f %%, N = %d yr) : %10.4f 1/yr\n', 100*p.i, p.N, ...
         p.i*(1+p.i)^p.N/((1+p.i)^p.N-1));
-fprintf('SWRO CAPEX, top-down     : %8.2f MUSD (%.0f USD per m3/d)\n', C_top/1e6, p.c_RO_spec);
-fprintf('RO island, Lu bottom-up  : %8.2f MUSD = %.0f %% of top-down\n', ...
-        C_isl/1e6, 100*C_isl/C_top);
-fprintf('   HP pump %.0f kUSD x %d at %.1f bar, %.0f m3/h;  PX %.0f kUSD x %d\n', ...
-        CC_hpp*esc*p.k_invest/1e3, kt, dPmax, Qhpp, CC_px*esc*p.k_invest/1e3, kt);
+fprintf('SWRO CAPEX, top-down       : %10.2f M%s  (%.0f %s per m3/d)\n', C_top/1e6, CUR, p.c_RO_spec, CUR);
+fprintf('RO island, Lu bottom-up    : %10.2f M%s  = %.0f %% of top-down\n', C_isl/1e6, CUR, 100*C_isl/C_top);
+fprintf('   HP pump %.0f k%s x %d at %.1f bar, %.0f m3/h;  PX %.0f k%s x %d\n', ...
+        CC_hpp*p.k_invest/1e3, CUR, kt, dPmax, Qhpp, CC_px*p.k_invest/1e3, CUR, kt);
 fprintf('   (compare the island share with the Voutchkov 2018 cost breakdown)\n');
 fprintf('%s\n', dash);
-fprintf('%6s %10s %6s %6s %7s | %6s %6s %6s %6s %6s %6s\n', 'kWp', 'water m3', ...
-        'util%', 'SEC', 'LCOW', 'capRO', 'capPV', 'omRO', 'omPV', 'rep', 'var');
+fprintf('%6s %10s %6s %7s %7s | %6s %6s %6s %6s %6s %6s\n', 'P', 'permeate', 'util', 'SEC', 'LCOW', ...
+        'capRO', 'capPV', 'omRO', 'omPV', 'rep', 'var');
+fprintf('%6s %10s %6s %7s %7s | %s\n', 'kWp', 'm3/yr', '%', 'kWh/m3', [CUR '/m3'], ...
+        sprintf('<------- contributions, %s/m3 ------->', CUR));
 for k = 1:nP
-    fprintf('%6d %10.0f %6.1f %6.3f %7.3f | %6.3f %6.3f %6.3f %6.3f %6.3f %6.3f%s\n', ...
+    fprintf('%6d %10.0f %6.1f %7.3f %7.3f | %6.3f %6.3f %6.3f %6.3f %6.3f %6.3f%s\n', ...
         Pk(k), W(k), 100*Y(1).util(k), Y(1).SEC(k), c.LCOW(k), ...
         c.capRO(k)/W(k), c.capPV(k)/W(k), c.omRO(k)/W(k), c.omPV(k)/W(k), ...
         (c.repInv(k)+c.repMem(k))/W(k), (c.var(k)+c.chm(k))/W(k), ...
         repmat('  <- min', 1, double(k==iOpt)));
 end
 fprintf('%s\n', dash);
-fprintf('minimum LCOW %.3f USD/m3 at %d kWp  (PV/SWRO = %.2f kWp per m3/h of capacity)\n', ...
-        LCOWmin, Popt, Popt/(Cap/24));
+fprintf('minimum LCOW %.3f %s/m3 (%s) at %d kWp  (PV/SWRO = %.2f kWp per m3/h of capacity)\n', ...
+        LCOWmin, CUR, B, Popt, Popt/(Cap/24));
+fprintf('annual cost at the minimum : %.0f k%s/yr for %.0f m3/yr\n', c.total(iOpt)/1e3, CUR, W(iOpt));
 if iOpt == 1 || iOpt == nP
     warning('LCOW minimum is at the edge of P_SWEEP (%d kWp): extend the sweep in pvDispatch.m', Popt);
 end
 if nY > 1
     Lopt = arrayfun(@(s) s.c.LCOW(iOpt), Y);
-    fprintf('inter-annual band at %d kWp : %.3f - %.3f USD/m3 (solar years %s)\n', ...
-            Popt, min(Lopt), max(Lopt), mat2str(yrs'));
+    fprintf('inter-annual band at %d kWp : %.3f - %.3f %s/m3 (solar years %s)\n', ...
+            Popt, min(Lopt), max(Lopt), CUR, mat2str(yrs'));
 end
-fprintf('\nsensitivity at %d kWp (design held fixed):\n', Popt);
+fprintf('\nsensitivity at %d kWp (design held fixed), %s/m3:\n', Popt, CUR);
 for s = 1:nS
-    fprintf('  %-26s %.3f / %.3f USD/m3\n', sens{s,1}, Lr(s,1), Lr(s,2));
+    fprintf('  %-26s %.3f / %.3f\n', sens{s,1}, Lr(s,1), Lr(s,2));
 end
 
 ph = Ptab.name(strcmp(Ptab.tag,'PH'));
@@ -238,18 +297,20 @@ fprintf('interim values to replace from the primary source before publication:\n
 fprintf('%s\n\n', sep);
 
 %% ====================== 8.  FIGURES  ==================================
+lblL = sprintf('LCOW  (%s_{%d}/m^3)', SYM, COST_YEAR);
+
 figure('Name','lcow 1/3 - LCOW against PV capacity','Color','w','Position',[60 300 760 480]);
 yyaxis left;  hold on;  grid on;  box on;
 for y = 1:nY
     plot(Pk, Y(y).c.LCOW, 'o-', 'LineWidth', 1.8 - 0.6*(y>1));
 end
 plot(Popt, LCOWmin, 'kp', 'MarkerSize', 14, 'MarkerFaceColor', 'y');
-ylabel(sprintf('LCOW  (USD_{%d}/m^3)', COST_YEAR));
+ylabel(lblL);
 yyaxis right;
 plot(Pk, W/1e3, 's--', 'LineWidth', 1.2);
-ylabel('annual permeate  (10^3 m^3)');
+ylabel('annual permeate  (10^3 m^3/yr)');
 xlabel('installed PV capacity  (kWp)');
-legend([arrayfun(@(v) sprintf('LCOW, solar %d', v), yrs', 'uni', 0), ...
+legend([arrayfun(@(v) sprintf('LCOW, solar year %s', num2str(v)), yrs', 'uni', 0), ...
         {'minimum', 'permeate'}], 'Location', 'north', 'Box', 'off');
 title('Small arrays leave the SWRO idle; large arrays are curtailed');
 
@@ -260,7 +321,7 @@ lab  = {'SWRO capital','PV capital','SWRO fixed O&M','PV O&M', ...
 use  = any(comp > 0, 1);
 bar(1:nP, comp(:,use), 'stacked');  grid on;  box on;
 xticks(1:nP);  xticklabels(string(Pk));
-xlabel('installed PV capacity  (kWp)');  ylabel('USD / m^3');
+xlabel('installed PV capacity  (kWp)');  ylabel(lblL);
 legend(lab(use), 'Location', 'northeast', 'Box', 'off');
 title('SWRO capital is spread over more water as PV grows');
 
@@ -271,7 +332,7 @@ hold on;  grid on;  box on;
 barh(1:nS, Lr(ord,1) - base, 'FaceColor', [0.20 0.45 0.75]);
 barh(1:nS, Lr(ord,2) - base, 'FaceColor', [0.85 0.40 0.10]);
 yticks(1:nS);  yticklabels(sens(ord,1));
-xlabel(sprintf('change in LCOW from %.3f USD/m^3', base));
+xlabel(sprintf('change in LCOW from %.3f %s_{%d}/m^3', base, SYM, COST_YEAR));
 legend('low value', 'high value', 'Location', 'southeast', 'Box', 'off');
 title(sprintf('Sensitivity at %d kWp', Popt));
 
@@ -279,20 +340,23 @@ title(sprintf('Sensitivity at %d kWp', Popt));
 [~, tag] = fileparts(ERDFILE);
 tag = erase(tag, 'erd_operating_');
 out = sprintf('lcow_%s.mat', tag);
+CURRENCY = string(CUR);
 save(out, 'Ptab', 'p', 'Pk', 'Y', 'yrs', 'C_RO', 'C_top', 'C_isl', 'Cap', ...
      'Popt', 'LCOWmin', 'sens', 'Lr', 'CAPEX_METHOD', 'OPEX_METHOD', ...
-     'COST_YEAR', 'DISPFILES', 'ERDFILE');
-writetable(Ptab, 'lcow_parameters.csv');
-fprintf('Saved %s and lcow_parameters.csv\n', out);
+     'COST_YEAR', 'CURRENCY', 'CEPCI', 'FX_USD_PER_EUR', 'DISPFILES', 'ERDFILE');
+writetable(Ptab(:, {'name','value','unit','currency','cost_year','factor', ...
+                    'value_basis','unit_basis','tag','source'}), 'lcow_parameters.csv');
+fprintf('Saved %s and lcow_parameters.csv (cost basis %s)\n', out, B);
 
-%% ====================== LOCAL FUNCTION  ===============================
-function c = lcowCore(p, P, W, C_RO, Cap, R, nEl, esc, pu_max, opexMode)
-%  Annual cost terms (USD/yr) and LCOW (USD/m3) for PV capacities P (kWp)
+%% ====================== LOCAL FUNCTIONS  ==============================
+function c = lcowCore(p, P, W, C_RO, Cap, R, nEl, pu_max, opexMode)
+%  Annual cost terms (CUR/yr) and LCOW (CUR/m3) for PV capacities P (kWp)
 %  and annual permeate W (m3/yr), both column vectors of equal length.
-    a     = p.i*(1+p.i)^p.N / ((1+p.i)^p.N - 1);
-    P_ac  = pu_max .* P;
+%  Every money value in p is already in the cost basis.
+    a     = p.i*(1+p.i)^p.N / ((1+p.i)^p.N - 1);      % 1/yr
+    P_ac  = pu_max .* P;                               % kW_ac
     tRep  = p.L_inv : p.L_inv : p.N-1;
-    pvRep = sum((1+p.i).^(-tRep));
+    pvRep = sum((1+p.i).^(-tRep));                     % present-value factor
     one   = ones(size(P));
 
     c.capRO  = C_RO * a * one;
@@ -307,8 +371,31 @@ function c = lcowCore(p, P, W, C_RO, Cap, R, nEl, esc, pu_max, opexMode)
     else
         c.var    = p.c_var_other .* W;
         c.chm    = p.c_chem .* W ./ R;
-        c.repMem = p.mem_rate * nEl * p.c_element_07 * esc * one;
+        c.repMem = p.mem_rate * nEl * p.c_element * one;
     end
     c.total = c.capRO + c.capPV + c.omRO + c.omPV + c.repInv + c.repMem + c.var + c.chm;
     c.LCOW  = c.total ./ W;
+end
+
+function f = costFactor(cur, yr, target, tyr, CEPCI, FX)
+%  Multiplier taking a value in currency CUR of year YR to currency TARGET
+%  of year TYR: escalate with CEPCI in the source currency, then convert at
+%  the TYR average exchange rate (FX = USD per EUR).
+    f = 1;
+    if ~isnan(yr) && yr ~= tyr
+        f = lookupYear(CEPCI, tyr, 'CEPCI') / lookupYear(CEPCI, yr, 'CEPCI');
+    end
+    if ~strcmp(cur, target)
+        rate = lookupYear(FX, tyr, 'FX_USD_PER_EUR');
+        if strcmp(cur, 'USD'), f = f / rate; else, f = f * rate; end
+    end
+end
+
+function v = lookupYear(T, yr, name)
+    row = T(:,1) == yr;
+    if ~any(row) || isnan(T(row,2))
+        error('lcowEconomics: no %s value for %d - add it to the %s table in SETTINGS', ...
+              name, yr, name);
+    end
+    v = T(row,2);
 end
