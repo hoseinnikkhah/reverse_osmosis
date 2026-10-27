@@ -1,21 +1,5 @@
 #!/usr/bin/env python3
-"""
-run_all.py
-Run the whole repository audit in the right order:
 
-  1. extract_commits.py      full commit history  -> OUT/commit_history.json
-  2. flag_matlab_renames.py  .m name changes, read from that file (printed)
-  3. find_run_order.py       script run order     -> OUT/run_order.txt
-  4. find_unused_files.py    unused files (printed only)
-
-Step 2 needs step 1's file, so the audit stops if step 1 fails.  Steps 3 and
-4 do not need git history and run even if the folder is not a git repository.
-
-Usage:
-    python run_all.py --repo PATH_TO_REPO [--out OUTPUT_DIR]
-
-Keep the five .py files together in one folder (inside or outside the repo).
-"""
 import argparse
 import os
 import subprocess
